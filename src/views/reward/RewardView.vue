@@ -4,10 +4,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { getList, create, update, remove } from '@/api/reward'
+import { getDepartments } from '@/api/admin'
 
 const userStore = useUserStore()
 const loading = ref(false)
 const tableData = ref([])
+const departments = ref([])
 
 const canEdit = userStore.hasRole('ROLE_CLERK') || userStore.hasRole('ROLE_ADMIN')
 
@@ -109,7 +111,17 @@ function getTypeTag(type) {
   return type === '奖励' ? 'success' : 'danger'
 }
 
-onMounted(fetchData)
+async function loadDepartments() {
+  try {
+    const res = await getDepartments()
+    departments.value = res.data || []
+  } catch { /* ignore */ }
+}
+
+onMounted(() => {
+  fetchData()
+  loadDepartments()
+})
 </script>
 
 <template>
@@ -187,7 +199,9 @@ onMounted(fetchData)
           </el-col>
           <el-col :span="12">
             <el-form-item label="部门" prop="department">
-              <el-input v-model="form.department" maxlength="100" />
+              <el-select v-model="form.department" style="width: 100%" clearable filterable placeholder="请选择部门">
+                <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.name" :disabled="!d.enabled" />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>

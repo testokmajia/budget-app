@@ -5,7 +5,7 @@ import { Plus, Search, User, Document, CircleCheck, CircleClose, View } from '@e
 import { useUserStore } from '@/stores/user'
 import { getList, getById, create, assign, submitSolution, complete, confirm, reject } from '@/api/issue'
 import { getUsers } from '@/api/admin'
-import { getCategories } from '@/api/admin'
+import { getCategories, getDepartments, getSystems } from '@/api/admin'
 
 const userStore = useUserStore()
 const loading = ref(false)
@@ -53,6 +53,8 @@ const assignForm = reactive({ category: '', assigneeId: null })
 const assignRules = { assigneeId: [{ required: true, message: '请选择责任人', trigger: 'change' }] }
 const users = ref([])
 const categories = ref([])
+const departments = ref([])
+const systems = ref([])
 
 // === 解决方案 ===
 const solutionVisible = ref(false)
@@ -95,8 +97,8 @@ async function fetchData() {
 
 async function loadUsers() {
   try {
-    const res = await getUsers()
-    users.value = res.data || []
+    const res = await getUsers({ size: 9999, enabled: true })
+    users.value = res.data?.content || []
   } catch { /* ignore */ }
 }
 
@@ -104,6 +106,20 @@ async function loadCategories() {
   try {
     const res = await getCategories()
     categories.value = res.data || []
+  } catch { /* ignore */ }
+}
+
+async function loadDepartments() {
+  try {
+    const res = await getDepartments()
+    departments.value = res.data || []
+  } catch { /* ignore */ }
+}
+
+async function loadSystems() {
+  try {
+    const res = await getSystems()
+    systems.value = res.data || []
   } catch { /* ignore */ }
 }
 
@@ -254,6 +270,8 @@ onMounted(() => {
   fetchData()
   loadUsers()
   loadCategories()
+  loadDepartments()
+  loadSystems()
 })
 </script>
 
@@ -348,7 +366,9 @@ onMounted(() => {
           <el-input v-model="createForm.description" type="textarea" :rows="4" maxlength="2000" show-word-limit />
         </el-form-item>
         <el-form-item label="所属部门" prop="department">
-          <el-input v-model="createForm.department" maxlength="100" />
+          <el-select v-model="createForm.department" style="width: 100%" clearable filterable placeholder="请选择部门">
+            <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.name" :disabled="!d.enabled" />
+          </el-select>
         </el-form-item>
         <el-form-item label="问题分类">
           <el-select v-model="createForm.category" style="width: 100%" clearable placeholder="请选择分类">
@@ -361,7 +381,9 @@ onMounted(() => {
           </el-select>
         </el-form-item>
         <el-form-item label="所属系统">
-          <el-input v-model="createForm.system" maxlength="100" placeholder="如：ERP、OA等" />
+          <el-select v-model="createForm.system" style="width: 100%" clearable filterable placeholder="请选择系统">
+            <el-option v-for="s in systems" :key="s.id" :label="s.name" :value="s.name" :disabled="!s.enabled" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>

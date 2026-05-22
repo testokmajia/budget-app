@@ -1,19 +1,35 @@
 package com.techmanage.service.impl;
 
 import com.techmanage.dto.CreateUserRequest;
+import com.techmanage.dto.DepartmentRequest;
 import com.techmanage.dto.IssueCategoryRequest;
+import com.techmanage.dto.PageResponse;
+import com.techmanage.dto.SystemInfoRequest;
+import com.techmanage.dto.TeamRequest;
 import com.techmanage.dto.UpdateUserRequest;
 import com.techmanage.dto.UserResponse;
+import com.techmanage.entity.Department;
 import com.techmanage.entity.IssueCategory;
 import com.techmanage.entity.Role;
+import com.techmanage.entity.SystemInfo;
+import com.techmanage.entity.Team;
 import com.techmanage.entity.User;
+import com.techmanage.repository.DepartmentRepository;
 import com.techmanage.repository.IssueCategoryRepository;
 import com.techmanage.repository.RoleRepository;
+import com.techmanage.repository.SystemInfoRepository;
+import com.techmanage.repository.TeamRepository;
 import com.techmanage.repository.UserRepository;
 import com.techmanage.service.AdminService;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
@@ -23,23 +39,51 @@ public class AdminServiceImpl implements AdminService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final IssueCategoryRepository categoryRepository;
+    private final DepartmentRepository departmentRepository;
+    private final SystemInfoRepository systemInfoRepository;
+    private final TeamRepository teamRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AdminServiceImpl(UserRepository userRepository,
                            RoleRepository roleRepository,
                            IssueCategoryRepository categoryRepository,
+                           DepartmentRepository departmentRepository,
+                           SystemInfoRepository systemInfoRepository,
+                           TeamRepository teamRepository,
                            PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.categoryRepository = categoryRepository;
+        this.departmentRepository = departmentRepository;
+        this.systemInfoRepository = systemInfoRepository;
+        this.teamRepository = teamRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Override
-    public List<UserResponse> listUsers() {
-        return userRepository.findAll().stream()
+    public PageResponse<UserResponse> listUsers(int page, int size, String username, String name, String department, Boolean enabled) {
+        Specification<User> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (username != null && !username.isBlank()) {
+                predicates.add(cb.like(root.get("username"), "%" + username.trim() + "%"));
+            }
+            if (name != null && !name.isBlank()) {
+                predicates.add(cb.like(root.get("name"), "%" + name.trim() + "%"));
+            }
+            if (department != null && !department.isBlank()) {
+                predicates.add(cb.equal(root.get("department"), department));
+            }
+            if (enabled != null) {
+                predicates.add(cb.equal(root.get("enabled"), enabled));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"));
+        Page<User> userPage = userRepository.findAll(spec, pageable);
+        List<UserResponse> content = userPage.getContent().stream()
             .map(this::toUserResponse)
             .toList();
+        return PageResponse.of(content, userPage.getTotalElements(), page, size);
     }
 
     @Override
@@ -128,6 +172,99 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public void deleteCategory(Long id) {
         categoryRepository.deleteById(id);
+    }
+
+    @Override
+    public List<Department> listDepartments() {
+        return departmentRepository.findAllByOrderByIdAsc();
+    }
+
+    @Override
+    public Department createDepartment(DepartmentRequest request) {
+        Department department = new Department();
+        department.setName(request.name());
+        department.setLeader(request.leader());
+        department.setEnabled(request.enabled());
+        return departmentRepository.save(department);
+    }
+
+    @Override
+    public Department updateDepartment(Long id, DepartmentRequest request) {
+        Department department = departmentRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("部门不存在"));
+        department.setName(request.name());
+        department.setLeader(request.leader());
+        department.setEnabled(request.enabled());
+        return departmentRepository.save(department);
+    }
+
+    @Override
+    public void deleteDepartment(Long id) {
+        departmentRepository.deleteById(id);
+    }
+
+    @Override
+    public List<SystemInfo> listSystems() {
+        return systemInfoRepository.findAllByOrderByIdAsc();
+    }
+
+    @Override
+    public SystemInfo createSystem(SystemInfoRequest request) {
+        SystemInfo system = new SystemInfo();
+        system.setName(request.name());
+        system.setLeader(request.leader());
+        system.setTeam(request.team());
+        system.setEnabled(request.enabled());
+        return systemInfoRepository.save(system);
+    }
+
+    @Override
+    public SystemInfo updateSystem(Long id, SystemInfoRequest request) {
+        SystemInfo system = systemInfoRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("系统不存在"));
+        system.setName(request.name());
+        system.setLeader(request.leader());
+        system.setTeam(request.team());
+        system.setEnabled(request.enabled());
+        return systemInfoRepository.save(system);
+    }
+
+    @Override
+    public void deleteSystem(Long id) {
+        systemInfoRepository.deleteById(id);
+    }
+
+    @Override
+    public List<Team> listTeams() {
+        return teamRepository.findAllByOrderByIdAsc();
+    }
+
+    @Override
+    public Team createTeam(TeamRequest request) {
+        Team team = new Team();
+        team.setName(request.name());
+        team.setDepartment(request.department());
+        team.setLeader(request.leader());
+        team.setMembers(request.members());
+        team.setEnabled(request.enabled());
+        return teamRepository.save(team);
+    }
+
+    @Override
+    public Team updateTeam(Long id, TeamRequest request) {
+        Team team = teamRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("团队不存在"));
+        team.setName(request.name());
+        team.setDepartment(request.department());
+        team.setLeader(request.leader());
+        team.setMembers(request.members());
+        team.setEnabled(request.enabled());
+        return teamRepository.save(team);
+    }
+
+    @Override
+    public void deleteTeam(Long id) {
+        teamRepository.deleteById(id);
     }
 
     private UserResponse toUserResponse(User user) {
