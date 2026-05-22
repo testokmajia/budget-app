@@ -3,6 +3,7 @@ package com.techmanage.service;
 import com.techmanage.dto.CreateUserRequest;
 import com.techmanage.dto.DepartmentRequest;
 import com.techmanage.dto.IssueCategoryRequest;
+import com.techmanage.dto.IssueOccasionRequest;
 import com.techmanage.dto.PageResponse;
 import com.techmanage.dto.SystemInfoRequest;
 import com.techmanage.dto.TeamRequest;
@@ -10,6 +11,7 @@ import com.techmanage.dto.UpdateUserRequest;
 import com.techmanage.dto.UserResponse;
 import com.techmanage.entity.Department;
 import com.techmanage.entity.IssueCategory;
+import com.techmanage.entity.IssueOccasion;
 import com.techmanage.entity.Role;
 import com.techmanage.entity.SystemInfo;
 import com.techmanage.entity.Team;
@@ -48,4 +50,10 @@ public interface AdminService {
     Team createTeam(TeamRequest request);
     Team updateTeam(Long id, TeamRequest request);
     void deleteTeam(Long id);
+
+    // 提出场合管理
+    List<IssueOccasion> listOccasions();
+    IssueOccasion createOccasion(IssueOccasionRequest request);
+    IssueOccasion updateOccasion(Long id, IssueOccasionRequest request);
+    void deleteOccasion(Long id);
 }

@@ -35,7 +35,7 @@ const routes = [
         path: 'issue',
         name: 'Issue',
         component: () => import('@/views/issue/IssueView.vue'),
-        meta: { title: '科技问题反馈' },
+        meta: { title: '科技问题管理' },
       },
       {
         path: 'admin',

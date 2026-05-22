@@ -1,12 +1,18 @@
 package com.techmanage.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
 
 public record IssueRequest(
-    @NotBlank String title,
-    @NotBlank String description,
-    @NotBlank String department,
-    @NotBlank String urgency,
-    String category,
-    String system
+    @NotBlank @Size(max = 20) String title,
+    @NotBlank @Size(max = 1000) String description,
+    @NotBlank String submitterDepartment,
+    Long occasionId,
+    String meetingDepartment,
+    LocalDate meetingDate,
+    String issueType,
+    String rootCause,
+    @Size(max = 1000) String permanentSolution,
+    LocalDate permanentDeadline
 ) {}

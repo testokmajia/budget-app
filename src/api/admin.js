@@ -75,3 +75,25 @@ export function updateTeam(id, data) {
 export function deleteTeam(id) {
   return request.delete(`/admin/teams/${id}`)
 }
+
+// 提出场合管理
+export function getOccasions() {
+  return request.get('/admin/occasions')
+}
+export function createOccasion(data) {
+  return request.post('/admin/occasions', data)
+}
+export function updateOccasion(id, data) {
+  return request.put(`/admin/occasions/${id}`, data)
+}
+export function deleteOccasion(id) {
+  return request.delete(`/admin/occasions/${id}`)
+}
+
+// Excel导出
+export function exportUsers() { return request.get('/admin/users/export', { responseType: 'blob' }) }
+export function exportCategories() { return request.get('/admin/categories/export', { responseType: 'blob' }) }
+export function exportDepartments() { return request.get('/admin/departments/export', { responseType: 'blob' }) }
+export function exportSystems() { return request.get('/admin/systems/export', { responseType: 'blob' }) }
+export function exportTeams() { return request.get('/admin/teams/export', { responseType: 'blob' }) }
+export function exportOccasions() { return request.get('/admin/occasions/export', { responseType: 'blob' }) }

@@ -24,3 +24,9 @@ export function confirm(id, data) {
 export function reject(id, data) {
   return request.put(`/issues/${id}/reject`, data)
 }
+export function closeIssue(id, data) {
+  return request.put(`/issues/${id}/close`, data)
+}
+export function exportIssues(params) {
+  return request.get('/issues/export', { params, responseType: 'blob' })
+}

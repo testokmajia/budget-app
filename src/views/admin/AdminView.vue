@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete } from '@element-plus/icons-vue'
-import { getUsers, createUser, updateUser, toggleUser, resetPassword, getRoles, getCategories, createCategory, updateCategory, deleteCategory, getDepartments, createDepartment, updateDepartment, deleteDepartment, getSystems, createSystem, updateSystem, deleteSystem, getTeams, createTeam, updateTeam, deleteTeam } from '@/api/admin'
+import { Plus, Edit, Delete, Download } from '@element-plus/icons-vue'
+import { getUsers, createUser, updateUser, toggleUser, resetPassword, getRoles, getCategories, createCategory, updateCategory, deleteCategory, getDepartments, createDepartment, updateDepartment, deleteDepartment, getSystems, createSystem, updateSystem, deleteSystem, getTeams, createTeam, updateTeam, deleteTeam, getOccasions, createOccasion, updateOccasion, deleteOccasion, exportUsers, exportCategories, exportDepartments, exportSystems, exportTeams, exportOccasions } from '@/api/admin'
 
 const activeTab = ref('users')
 
@@ -272,6 +272,14 @@ const filteredMembers = computed(() => {
 const isTeamEdit = ref(false)
 const editTeamId = ref(null)
 
+const teamMemberCount = (row) => {
+  if (!row.members) return 0
+  return row.members.split(',').filter(s => s.trim()).length
+}
+const totalTeamMembers = computed(() => {
+  return teams.value.reduce((sum, t) => sum + teamMemberCount(t), 0)
+})
+
 async function fetchTeams() {
   const res = await getTeams()
   teams.value = res.data || []
@@ -308,6 +316,74 @@ async function handleTeamSubmit() {
   fetchTeams()
 }
 
+// === 提出场合管理 ===
+const occasions = ref([])
+const occasionDialogVisible = ref(false)
+const occasionForm = reactive({ name: '', type: 'MEETING', enabled: true })
+const isOccasionEdit = ref(false)
+const editOccasionId = ref(null)
+
+async function fetchOccasions() {
+	const res = await getOccasions()
+	occasions.value = res.data || []
+}
+function handleAddOccasion() {
+	isOccasionEdit.value = false
+	editOccasionId.value = null
+	Object.assign(occasionForm, { name: '', type: 'MEETING', enabled: true })
+	occasionDialogVisible.value = true
+}
+function handleEditOccasion(row) {
+	isOccasionEdit.value = true
+	editOccasionId.value = row.id
+	Object.assign(occasionForm, { name: row.name, type: row.type, enabled: row.enabled })
+	occasionDialogVisible.value = true
+}
+async function handleDeleteOccasion(row) {
+	await ElMessageBox.confirm('确定删除该场合吗？', '提示', { type: 'warning' })
+	await deleteOccasion(row.id)
+	ElMessage.success('已删除')
+	fetchOccasions()
+}
+async function handleOccasionSubmit() {
+	if (isOccasionEdit.value) {
+		await updateOccasion(editOccasionId.value, occasionForm)
+		ElMessage.success('已更新')
+	} else {
+		await createOccasion(occasionForm)
+		ElMessage.success('已创建')
+	}
+	occasionDialogVisible.value = false
+	fetchOccasions()
+}
+
+function downloadBlob(res, filename) {
+  const url = window.URL.createObjectURL(new Blob([res]))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  window.URL.revokeObjectURL(url)
+}
+async function handleExportUsers() {
+  try { const res = await exportUsers(); downloadBlob(res, '用户管理.xlsx') } catch { ElMessage.warning('导出失败') }
+}
+async function handleExportCategories() {
+  try { const res = await exportCategories(); downloadBlob(res, '问题分类.xlsx') } catch { ElMessage.warning('导出失败') }
+}
+async function handleExportDepartments() {
+  try { const res = await exportDepartments(); downloadBlob(res, '部门管理.xlsx') } catch { ElMessage.warning('导出失败') }
+}
+async function handleExportSystems() {
+  try { const res = await exportSystems(); downloadBlob(res, '信息系统.xlsx') } catch { ElMessage.warning('导出失败') }
+}
+async function handleExportTeams() {
+  try { const res = await exportTeams(); downloadBlob(res, '团队管理.xlsx') } catch { ElMessage.warning('导出失败') }
+}
+async function handleExportOccasions() {
+  try { const res = await exportOccasions(); downloadBlob(res, '提出场合.xlsx') } catch { ElMessage.warning('导出失败') }
+}
+
 onMounted(() => {
   fetchUsers()
   fetchAllUsers()
@@ -316,6 +392,7 @@ onMounted(() => {
   fetchDepartments()
   fetchSystems()
   fetchTeams()
+  fetchOccasions()
 })
 </script>
 
@@ -328,6 +405,7 @@ onMounted(() => {
       <el-tab-pane label="用户管理" name="users">
         <div class="user-toolbar">
           <el-button type="primary" :icon="Plus" @click="handleAddUser">新增用户</el-button>
+          <el-button :icon="Download" @click="handleExportUsers">导出</el-button>
           <div class="user-filters">
             <el-input v-model="userFilters.username" placeholder="用户名" clearable style="width: 140px" @keyup.enter="handleUserFilter" @clear="handleUserFilter" />
             <el-input v-model="userFilters.name" placeholder="姓名" clearable style="width: 120px" @keyup.enter="handleUserFilter" @clear="handleUserFilter" />
@@ -361,7 +439,7 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="240" fixed="right">
+          <el-table-column label="操作" min-width="190" fixed="right" class-name="actions-col">
             <template #default="{ row }">
               <el-button type="primary" link :icon="Edit" @click="handleEdit(row)">编辑</el-button>
               <el-button type="primary" link @click="handleResetPwd(row)">重置密码</el-button>
@@ -393,6 +471,7 @@ onMounted(() => {
       <el-tab-pane label="问题分类" name="categories">
         <div style="margin-bottom: 16px">
           <el-button type="primary" :icon="Plus" @click="handleAddCategory">新增分类</el-button>
+          <el-button :icon="Download" @click="handleExportCategories">导出</el-button>
         </div>
         <el-table :data="categories" stripe border>
           <el-table-column prop="name" label="分类名称" width="200" />
@@ -404,7 +483,7 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="160">
+          <el-table-column label="操作" class-name="actions-col">
             <template #default="{ row }">
               <el-button type="primary" link :icon="Edit" @click="handleEditCategory(row)">编辑</el-button>
               <el-button type="danger" link :icon="Delete" @click="handleDeleteCategory(row)">删除</el-button>
@@ -417,6 +496,7 @@ onMounted(() => {
       <el-tab-pane label="部门管理" name="departments">
         <div style="margin-bottom: 16px">
           <el-button type="primary" :icon="Plus" @click="handleAddDepartment">新增部门</el-button>
+          <el-button :icon="Download" @click="handleExportDepartments">导出</el-button>
         </div>
         <el-table :data="departments" stripe border>
           <el-table-column prop="name" label="部门名称" width="200" />
@@ -428,7 +508,7 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="160">
+          <el-table-column label="操作" class-name="actions-col">
             <template #default="{ row }">
               <el-button type="primary" link :icon="Edit" @click="handleEditDepartment(row)">编辑</el-button>
               <el-button type="danger" link :icon="Delete" @click="handleDeleteDepartment(row)">删除</el-button>
@@ -441,6 +521,7 @@ onMounted(() => {
       <el-tab-pane label="信息系统" name="systems">
         <div style="margin-bottom: 16px">
           <el-button type="primary" :icon="Plus" @click="handleAddSystem">新增系统</el-button>
+          <el-button :icon="Download" @click="handleExportSystems">导出</el-button>
         </div>
         <el-table :data="systems" stripe border>
           <el-table-column prop="name" label="系统名称" width="180" />
@@ -453,7 +534,7 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="160">
+          <el-table-column label="操作" class-name="actions-col">
             <template #default="{ row }">
               <el-button type="primary" link :icon="Edit" @click="handleEditSystem(row)">编辑</el-button>
               <el-button type="danger" link :icon="Delete" @click="handleDeleteSystem(row)">删除</el-button>
@@ -466,9 +547,14 @@ onMounted(() => {
       <el-tab-pane label="团队管理" name="teams">
         <div style="margin-bottom: 16px">
           <el-button type="primary" :icon="Plus" @click="handleAddTeam">新增团队</el-button>
+          <el-button :icon="Download" @click="handleExportTeams">导出</el-button>
         </div>
         <el-table :data="teams" stripe border>
-          <el-table-column prop="name" label="团队名称" width="160" />
+          <el-table-column label="团队名称" width="240">
+            <template #default="{ row }">
+              {{ row.name }} <span style="color: #909399; font-size: 13px">({{ teamMemberCount(row) }}人)</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="department" label="所属部门" width="140" />
           <el-table-column prop="leader" label="团队负责人" width="120" />
           <el-table-column prop="members" label="团队成员" min-width="200" show-overflow-tooltip />
@@ -479,10 +565,44 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="160">
+          <el-table-column label="操作" class-name="actions-col">
             <template #default="{ row }">
               <el-button type="primary" link :icon="Edit" @click="handleEditTeam(row)">编辑</el-button>
               <el-button type="danger" link :icon="Delete" @click="handleDeleteTeam(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div style="text-align: right; margin-top: 12px; color: #606266; font-size: 14px">
+          团队成员合计：<strong>{{ totalTeamMembers }}</strong> 人
+        </div>
+      </el-tab-pane>
+
+      <!-- 提出场合 -->
+      <el-tab-pane label="提出场合" name="occasions">
+        <div style="margin-bottom: 16px">
+          <el-button type="primary" :icon="Plus" @click="handleAddOccasion">新增场合</el-button>
+          <el-button :icon="Download" @click="handleExportOccasions">导出</el-button>
+        </div>
+        <el-table :data="occasions" stripe border>
+          <el-table-column prop="name" label="场合名称" width="260" />
+          <el-table-column label="类型" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.type === 'MEETING' ? 'warning' : 'info'" size="small">
+                {{ row.type === 'MEETING' ? '会议' : '通用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
+                {{ row.enabled ? '启用' : '禁用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" class-name="actions-col">
+            <template #default="{ row }">
+              <el-button type="primary" link :icon="Edit" @click="handleEditOccasion(row)">编辑</el-button>
+              <el-button type="danger" link :icon="Delete" @click="handleDeleteOccasion(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -659,10 +779,35 @@ onMounted(() => {
         <el-button type="primary" @click="handleTeamSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 场合弹窗 -->
+    <el-dialog v-model="occasionDialogVisible" :title="isOccasionEdit ? '编辑场合' : '新增场合'" width="480px">
+      <el-form :model="occasionForm" label-width="80px">
+        <el-form-item label="名称">
+          <el-input v-model="occasionForm.name" />
+        </el-form-item>
+        <el-form-item label="类型">
+          <el-select v-model="occasionForm.type" style="width: 100%">
+            <el-option label="会议" value="MEETING" />
+            <el-option label="通用" value="GENERAL" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-switch v-model="occasionForm.enabled" active-text="启用" inactive-text="禁用" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="occasionDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleOccasionSubmit">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
+:deep(.actions-col .cell) {
+  white-space: nowrap;
+}
 .user-toolbar {
   display: flex;
   justify-content: space-between;

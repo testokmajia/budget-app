@@ -1,9 +1,11 @@
 package com.techmanage.config;
 
 import com.techmanage.entity.IssueCategory;
+import com.techmanage.entity.IssueOccasion;
 import com.techmanage.entity.Role;
 import com.techmanage.entity.User;
 import com.techmanage.repository.IssueCategoryRepository;
+import com.techmanage.repository.IssueOccasionRepository;
 import com.techmanage.repository.RoleRepository;
 import com.techmanage.repository.UserRepository;
 import org.slf4j.Logger;
@@ -22,15 +24,18 @@ public class DataInitializer implements CommandLineRunner {
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final IssueCategoryRepository categoryRepository;
+    private final IssueOccasionRepository occasionRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(RoleRepository roleRepository,
                           UserRepository userRepository,
                           IssueCategoryRepository categoryRepository,
+                          IssueOccasionRepository occasionRepository,
                           PasswordEncoder passwordEncoder) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
+        this.occasionRepository = occasionRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -39,6 +44,7 @@ public class DataInitializer implements CommandLineRunner {
         initRoles();
         initAdminUser();
         initCategories();
+        initOccasions();
     }
 
     private void initRoles() {
@@ -80,6 +86,25 @@ public class DataInitializer implements CommandLineRunner {
                 cat.setEnabled(true);
                 categoryRepository.save(cat);
                 log.info("问题分类已初始化: {}", names[i]);
+            }
+        }
+    }
+
+    private void initOccasions() {
+        String[][] data = {
+            {"20260515吐槽大会-信息科技部", "MEETING"},
+            {"业务协调会", "MEETING"},
+            {"线上提出", "GENERAL"},
+            {"其他", "GENERAL"}
+        };
+        for (String[] item : data) {
+            if (!occasionRepository.existsByName(item[0])) {
+                var o = new IssueOccasion();
+                o.setName(item[0]);
+                o.setType(item[1]);
+                o.setEnabled(true);
+                occasionRepository.save(o);
+                log.info("提出场合已初始化: {}", item[0]);
             }
         }
     }

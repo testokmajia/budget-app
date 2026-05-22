@@ -2,18 +2,12 @@ package com.techmanage.repository;
 
 import com.techmanage.entity.IssueFeedback;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.List;
 
-public interface IssueFeedbackRepository extends JpaRepository<IssueFeedback, Long> {
+public interface IssueFeedbackRepository extends JpaRepository<IssueFeedback, Long>,
+        JpaSpecificationExecutor<IssueFeedback> {
 
     List<IssueFeedback> findBySubmitterIdOrderByCreatedAtDesc(Long submitterId);
-
-    List<IssueFeedback> findByAssigneeIdOrderByCreatedAtDesc(Long assigneeId);
-
-    List<IssueFeedback> findByDepartmentOrderByCreatedAtDesc(String department);
-
-    @Query("SELECT i FROM IssueFeedback i ORDER BY i.createdAt DESC")
-    List<IssueFeedback> findAllOrdered();
 }

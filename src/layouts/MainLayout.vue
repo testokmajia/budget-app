@@ -18,7 +18,7 @@ const menuItems = [
   { path: '/dashboard', title: '首页', icon: HomeFilled },
   { path: '/checklist', title: '清单管理', icon: List },
   { path: '/reward', title: '奖惩记录', icon: Trophy },
-  { path: '/issue', title: '科技问题反馈', icon: Warning },
+  { path: '/issue', title: '科技问题管理', icon: Warning },
 ]
 
 const adminMenu = [

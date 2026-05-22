@@ -3,6 +3,7 @@ package com.techmanage.service.impl;
 import com.techmanage.dto.CreateUserRequest;
 import com.techmanage.dto.DepartmentRequest;
 import com.techmanage.dto.IssueCategoryRequest;
+import com.techmanage.dto.IssueOccasionRequest;
 import com.techmanage.dto.PageResponse;
 import com.techmanage.dto.SystemInfoRequest;
 import com.techmanage.dto.TeamRequest;
@@ -10,12 +11,14 @@ import com.techmanage.dto.UpdateUserRequest;
 import com.techmanage.dto.UserResponse;
 import com.techmanage.entity.Department;
 import com.techmanage.entity.IssueCategory;
+import com.techmanage.entity.IssueOccasion;
 import com.techmanage.entity.Role;
 import com.techmanage.entity.SystemInfo;
 import com.techmanage.entity.Team;
 import com.techmanage.entity.User;
 import com.techmanage.repository.DepartmentRepository;
 import com.techmanage.repository.IssueCategoryRepository;
+import com.techmanage.repository.IssueOccasionRepository;
 import com.techmanage.repository.RoleRepository;
 import com.techmanage.repository.SystemInfoRepository;
 import com.techmanage.repository.TeamRepository;
@@ -42,6 +45,7 @@ public class AdminServiceImpl implements AdminService {
     private final DepartmentRepository departmentRepository;
     private final SystemInfoRepository systemInfoRepository;
     private final TeamRepository teamRepository;
+    private final IssueOccasionRepository occasionRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AdminServiceImpl(UserRepository userRepository,
@@ -50,6 +54,7 @@ public class AdminServiceImpl implements AdminService {
                            DepartmentRepository departmentRepository,
                            SystemInfoRepository systemInfoRepository,
                            TeamRepository teamRepository,
+                           IssueOccasionRepository occasionRepository,
                            PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -57,6 +62,7 @@ public class AdminServiceImpl implements AdminService {
         this.departmentRepository = departmentRepository;
         this.systemInfoRepository = systemInfoRepository;
         this.teamRepository = teamRepository;
+        this.occasionRepository = occasionRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -265,6 +271,35 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public void deleteTeam(Long id) {
         teamRepository.deleteById(id);
+    }
+
+    @Override
+    public List<IssueOccasion> listOccasions() {
+        return occasionRepository.findAllByOrderByIdAsc();
+    }
+
+    @Override
+    public IssueOccasion createOccasion(IssueOccasionRequest request) {
+        IssueOccasion occasion = new IssueOccasion();
+        occasion.setName(request.name());
+        occasion.setType(request.type());
+        occasion.setEnabled(request.enabled());
+        return occasionRepository.save(occasion);
+    }
+
+    @Override
+    public IssueOccasion updateOccasion(Long id, IssueOccasionRequest request) {
+        IssueOccasion occasion = occasionRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("场合不存在"));
+        occasion.setName(request.name());
+        occasion.setType(request.type());
+        occasion.setEnabled(request.enabled());
+        return occasionRepository.save(occasion);
+    }
+
+    @Override
+    public void deleteOccasion(Long id) {
+        occasionRepository.deleteById(id);
     }
 
     private UserResponse toUserResponse(User user) {
