@@ -27,6 +27,9 @@ export function reject(id, data) {
 export function closeIssue(id, data) {
   return request.put(`/issues/${id}/close`, data)
 }
+export function updateIssue(id, data) {
+  return request.put(`/issues/${id}`, data)
+}
 export function exportIssues(params) {
   return request.get('/issues/export', { params, responseType: 'blob' })
 }

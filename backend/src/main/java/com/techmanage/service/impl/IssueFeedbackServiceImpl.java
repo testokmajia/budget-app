@@ -231,6 +231,31 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
         return toResponse(issue);
     }
 
+    @Override
+    public IssueResponse update(Long id, Long userId, IssueUpdateRequest request) {
+        var issue = find(id);
+
+        if (request.title() != null) issue.setTitle(request.title());
+        if (request.description() != null) issue.setDescription(request.description());
+        if (request.submitterDepartment() != null) issue.setSubmitterDepartment(request.submitterDepartment());
+        if (request.occasionId() != null) issue.setOccasionId(request.occasionId());
+        if (request.meetingDepartment() != null) issue.setMeetingDepartment(request.meetingDepartment());
+        if (request.meetingDate() != null) issue.setMeetingDate(request.meetingDate());
+        if (request.issueType() != null) issue.setIssueType(request.issueType());
+        if (request.responsibleTeam() != null) issue.setResponsibleTeam(request.responsibleTeam());
+        if (request.responsiblePersonId() != null) issue.setResponsiblePersonId(request.responsiblePersonId());
+        if (request.temporarySolution() != null) issue.setTemporarySolution(request.temporarySolution());
+        if (request.temporaryDeadline() != null) issue.setTemporaryDeadline(request.temporaryDeadline());
+        if (request.rootCause() != null) issue.setRootCause(request.rootCause());
+        if (request.permanentSolution() != null) issue.setPermanentSolution(request.permanentSolution());
+        if (request.permanentDeadline() != null) issue.setPermanentDeadline(request.permanentDeadline());
+        if (request.status() != null) issue.setStatus(request.status());
+
+        issueRepository.save(issue);
+        addLog(issue.getId(), userId, "管理员编辑", "修改了问题信息");
+        return toResponse(issue);
+    }
+
     private IssueFeedback find(Long id) {
         return issueRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("问题不存在"));

@@ -127,6 +127,15 @@ public class IssueFeedbackController {
         return ApiResponse.ok(issueService.close(id, userId, request));
     }
 
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ROLE_ISSUE_ADMIN', 'ROLE_ADMIN')")
+    public ApiResponse<IssueResponse> update(@PathVariable Long id,
+                                              Authentication auth,
+                                              @Valid @RequestBody IssueUpdateRequest request) {
+        Long userId = (Long) auth.getPrincipal();
+        return ApiResponse.ok(issueService.update(id, userId, request));
+    }
+
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(Authentication auth,
                                           @RequestParam(required = false) List<String> statuses,

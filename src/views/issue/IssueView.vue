@@ -3,7 +3,7 @@ import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, View, Download } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { getList, getById, create, assign, submitSolution, complete, confirm, reject, closeIssue, exportIssues } from '@/api/issue'
+import { getList, getById, create, assign, submitSolution, complete, confirm, reject, closeIssue, updateIssue, exportIssues } from '@/api/issue'
 import { getUsers, getCategories, getDepartments, getTeams, getOccasions } from '@/api/admin'
 
 const userStore = useUserStore()
@@ -120,6 +120,28 @@ const closeVisible = ref(false)
 const closeId = ref(null)
 const closeFormRef = ref(null)
 const closeForm = reactive({ reason: '' })
+
+// === Admin edit dialog ===
+const editVisible = ref(false)
+const editId = ref(null)
+const editFormRef = ref(null)
+const editForm = reactive({
+  title: '',
+  description: '',
+  submitterDepartment: '',
+  occasionId: null,
+  meetingDepartment: '',
+  meetingDate: '',
+  issueType: '',
+  responsibleTeam: '',
+  responsiblePersonId: null,
+  temporarySolution: '',
+  temporaryDeadline: '',
+  rootCause: '',
+  permanentSolution: '',
+  permanentDeadline: '',
+  status: '',
+})
 
 // === Detail drawer ===
 const detailVisible = ref(false)
@@ -363,6 +385,33 @@ async function handleCloseSubmit() {
   fetchData()
 }
 
+// === Admin edit ===
+function handleEdit(row) {
+  editId.value = row.id
+  editForm.title = row.title || ''
+  editForm.description = row.description || ''
+  editForm.submitterDepartment = row.submitterDepartment || ''
+  editForm.occasionId = row.occasionId || null
+  editForm.meetingDepartment = row.meetingDepartment || ''
+  editForm.meetingDate = row.meetingDate || ''
+  editForm.issueType = row.issueType || ''
+  editForm.responsibleTeam = row.responsibleTeam || ''
+  editForm.responsiblePersonId = row.responsiblePersonId || null
+  editForm.temporarySolution = row.temporarySolution || ''
+  editForm.temporaryDeadline = row.temporaryDeadline || ''
+  editForm.rootCause = row.rootCause || ''
+  editForm.permanentSolution = row.permanentSolution || ''
+  editForm.permanentDeadline = row.permanentDeadline || ''
+  editForm.status = row.status || ''
+  editVisible.value = true
+}
+async function handleEditSubmit() {
+  await updateIssue(editId.value, { ...editForm })
+  ElMessage.success('问题已更新')
+  editVisible.value = false
+  fetchData()
+}
+
 // === Export ===
 async function handleExport() {
   const params = {}
@@ -467,12 +516,12 @@ onMounted(() => {
     <el-table :data="tableData" v-loading="loading" stripe border @sort-change="handleSortChange"
               :default-sort="{ prop: 'createdAt', order: 'descending' }">
       <el-table-column prop="issueCode" label="问题编号" min-width="170" sortable="custom" />
-      <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip sortable="custom">
+      <el-table-column prop="title" label="标题" min-width="210" show-overflow-tooltip sortable="custom">
         <template #default="{ row }">
           <el-button type="primary" link @click="handleDetail(row)">{{ row.title }}</el-button>
         </template>
       </el-table-column>
-      <el-table-column prop="submitterDepartment" label="提出部门" min-width="110" sortable="custom" />
+      <el-table-column prop="submitterDepartment" label="提出部门" min-width="120" sortable="custom" />
       <el-table-column prop="submitterName" label="提出人" min-width="110" sortable="custom" />
       <el-table-column prop="occasionName" label="提出场合" min-width="130" show-overflow-tooltip />
       <el-table-column prop="issueType" label="问题类型" min-width="120" sortable="custom" />
@@ -500,6 +549,11 @@ onMounted(() => {
       <el-table-column label="操作" min-width="200" fixed="right" class-name="actions-col">
         <template #default="{ row }">
           <el-button type="info" link :icon="View" @click="handleDetail(row)">详情</el-button>
+
+          <el-button
+            v-if="canManage"
+            type="warning" link @click="handleEdit(row)"
+          >编辑</el-button>
 
           <el-button
             v-if="canManage && (row.status === '待分派' || row.status === '已分派' || row.status === '整改中')"
@@ -664,6 +718,114 @@ onMounted(() => {
       <template #footer>
         <el-button @click="closeVisible = false">取消</el-button>
         <el-button type="danger" @click="handleCloseSubmit">确认关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Admin edit dialog -->
+    <el-dialog v-model="editVisible" title="编辑问题" width="700px">
+      <el-form ref="editFormRef" :model="editForm" label-width="110px">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="问题标题">
+              <el-input v-model="editForm.title" maxlength="20" show-word-limit />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="问题状态">
+              <el-select v-model="editForm.status" style="width: 100%">
+                <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="问题详情">
+          <el-input v-model="editForm.description" type="textarea" :rows="3" maxlength="1000" show-word-limit />
+        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="提出部门">
+              <el-select v-model="editForm.submitterDepartment" style="width: 100%" clearable filterable>
+                <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.name" :disabled="!d.enabled" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="提出场合">
+              <el-select v-model="editForm.occasionId" style="width: 100%" clearable>
+                <el-option-group label="会议">
+                  <el-option v-for="o in occasions.filter(x => x.type === 'MEETING' && x.enabled)" :key="o.id" :label="o.name" :value="o.id" />
+                </el-option-group>
+                <el-option-group label="通用">
+                  <el-option v-for="o in occasions.filter(x => x.type === 'GENERAL' && x.enabled)" :key="o.id" :label="o.name" :value="o.id" />
+                </el-option-group>
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="会议参与部门">
+              <el-input v-model="editForm.meetingDepartment" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="会议日期">
+              <el-date-picker v-model="editForm.meetingDate" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="问题类型">
+              <el-select v-model="editForm.issueType" style="width: 100%" clearable>
+                <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.name" :disabled="!c.enabled" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="责任团队">
+              <el-select v-model="editForm.responsibleTeam" style="width: 100%" clearable>
+                <el-option v-for="t in teams" :key="t.id" :label="t.name" :value="t.name" :disabled="!t.enabled" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="责任人">
+              <el-select v-model="editForm.responsiblePersonId" style="width: 100%" clearable filterable>
+                <el-option v-for="u in allUsers" :key="u.id" :label="`${u.name} (${u.department || '-'})`" :value="u.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="临时整改时限">
+              <el-date-picker v-model="editForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="临时整改方案">
+          <el-input v-model="editForm.temporarySolution" type="textarea" :rows="2" maxlength="2000" show-word-limit />
+        </el-form-item>
+        <el-form-item label="产生原因">
+          <el-input v-model="editForm.rootCause" type="textarea" :rows="2" maxlength="2000" />
+        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="永久解决方案">
+              <el-input v-model="editForm.permanentSolution" type="textarea" :rows="2" maxlength="1000" show-word-limit />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="永久解决时限">
+              <el-date-picker v-model="editForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleEditSubmit">保存</el-button>
       </template>
     </el-dialog>
 

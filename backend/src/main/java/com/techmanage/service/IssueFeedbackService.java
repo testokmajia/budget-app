@@ -19,4 +19,5 @@ public interface IssueFeedbackService {
     IssueResponse confirm(Long id, Long userId, IssueConfirmRequest request);
     IssueResponse reject(Long id, Long userId, IssueRejectRequest request);
     IssueResponse close(Long id, Long userId, IssueCloseRequest request);
+    IssueResponse update(Long id, Long userId, IssueUpdateRequest request);
 }
