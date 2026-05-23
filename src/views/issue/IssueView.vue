@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, View, Download } from '@element-plus/icons-vue'
+import { Plus, Search, Download } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { getList, getById, create, assign, submitSolution, complete, confirm, reject, closeIssue, updateIssue, exportIssues } from '@/api/issue'
 import { getUsers, getCategories, getDepartments, getTeams, getOccasions } from '@/api/admin'
@@ -142,6 +142,12 @@ const editForm = reactive({
   permanentDeadline: '',
   status: '',
 })
+const editRules = {
+  title: [{ required: true, message: '请输入问题标题', trigger: 'blur' }],
+  description: [{ required: true, message: '请输入问题详情', trigger: 'blur' }],
+  submitterDepartment: [{ required: true, message: '请选择提出部门', trigger: 'change' }],
+  status: [{ required: true, message: '请选择状态', trigger: 'change' }],
+}
 
 // === Detail drawer ===
 const detailVisible = ref(false)
@@ -406,6 +412,8 @@ function handleEdit(row) {
   editVisible.value = true
 }
 async function handleEditSubmit() {
+  const valid = await editFormRef.value.validate().catch(() => null)
+  if (!valid) return
   await updateIssue(editId.value, { ...editForm })
   ElMessage.success('问题已更新')
   editVisible.value = false
@@ -515,25 +523,21 @@ onMounted(() => {
     <div class="table-wrap">
     <el-table :data="tableData" v-loading="loading" stripe border @sort-change="handleSortChange"
               :default-sort="{ prop: 'createdAt', order: 'descending' }">
-      <el-table-column prop="issueCode" label="问题编号" min-width="170" sortable="custom" />
-      <el-table-column prop="title" label="标题" min-width="210" show-overflow-tooltip sortable="custom">
+      <el-table-column prop="issueCode" label="问题编号" min-width="153" sortable="custom" />
+      <el-table-column prop="title" label="标题" min-width="290" show-overflow-tooltip sortable="custom">
         <template #default="{ row }">
           <el-button type="primary" link @click="handleDetail(row)">{{ row.title }}</el-button>
         </template>
       </el-table-column>
-      <el-table-column prop="submitterDepartment" label="提出部门" min-width="120" sortable="custom" />
+      <el-table-column prop="submitterDepartment" label="提出部门" min-width="132" sortable="custom" />
       <el-table-column prop="submitterName" label="提出人" min-width="110" sortable="custom" />
       <el-table-column prop="occasionName" label="提出场合" min-width="130" show-overflow-tooltip />
-      <el-table-column prop="issueType" label="问题类型" min-width="120" sortable="custom" />
       <el-table-column prop="responsibleTeam" label="责任团队" min-width="110" show-overflow-tooltip />
       <el-table-column prop="responsiblePersonName" label="责任人" min-width="90">
         <template #default="{ row }">
           <span v-if="row.responsiblePersonName">{{ row.responsiblePersonName }}</span>
           <span v-else style="color: #c0c4cc">未分配</span>
         </template>
-      </el-table-column>
-      <el-table-column prop="temporaryDeadline" label="临时时限" min-width="110" sortable="custom">
-        <template #default="{ row }">{{ formatDate(row.temporaryDeadline) }}</template>
       </el-table-column>
       <el-table-column prop="permanentDeadline" label="永久时限" min-width="110" sortable="custom">
         <template #default="{ row }">{{ formatDate(row.permanentDeadline) }}</template>
@@ -546,44 +550,44 @@ onMounted(() => {
       <el-table-column prop="createdAt" label="提出日期" min-width="120" sortable="custom">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" min-width="200" fixed="right" class-name="actions-col">
+      <el-table-column label="操作" width="290" fixed="right">
         <template #default="{ row }">
-          <el-button type="info" link :icon="View" @click="handleDetail(row)">详情</el-button>
+          <div class="action-btns">
+            <el-button
+              v-if="canManage"
+              type="warning" size="small" @click="handleEdit(row)"
+            >编辑</el-button>
 
-          <el-button
-            v-if="canManage"
-            type="warning" link @click="handleEdit(row)"
-          >编辑</el-button>
+            <el-button
+              v-if="canManage && (row.status === '待分派' || row.status === '已分派' || row.status === '整改中')"
+              type="primary" size="small" @click="handleAssign(row)"
+            >分派</el-button>
 
-          <el-button
-            v-if="canManage && (row.status === '待分派' || row.status === '已分派' || row.status === '整改中')"
-            type="primary" link @click="handleAssign(row)"
-          >分派</el-button>
+            <el-button
+              v-if="canManage && row.status === '待分派'"
+              type="danger" size="small" @click="handleReject(row)"
+            >驳回</el-button>
 
-          <el-button
-            v-if="canManage && row.status === '待分派'"
-            type="danger" link @click="handleReject(row)"
-          >驳回</el-button>
+            <el-button
+              v-if="(row.status === '已分派' || row.status === '整改中') && isResponsiblePerson(row)"
+              type="primary" size="small" @click="handleSolution(row)"
+            >方案</el-button>
 
-          <el-button
-            v-if="(row.status === '已分派' || row.status === '整改中') && isResponsiblePerson(row)"
-            type="primary" link @click="handleSolution(row)"
-          >方案</el-button>
+            <el-button
+              v-if="row.status === '整改中' && isResponsiblePerson(row)"
+              type="success" size="small" @click="handleComplete(row)"
+            >完成</el-button>
 
-          <el-button
-            v-if="row.status === '整改中' && isResponsiblePerson(row)"
-            type="success" link @click="handleComplete(row)"
-          >完成</el-button>
+            <template v-if="row.status === '待确认' && isSubmitter(row)">
+              <el-button type="success" size="small" @click="handleConfirm(row, true)">确认</el-button>
+              <el-button type="warning" size="small" @click="handleConfirm(row, false)">退回</el-button>
+            </template>
 
-          <template v-if="row.status === '待确认' && isSubmitter(row)">
-            <el-button type="success" link @click="handleConfirm(row, true)">确认</el-button>
-            <el-button type="warning" link @click="handleConfirm(row, false)">退回</el-button>
-          </template>
-
-          <el-button
-            v-if="canManage && row.status !== '已关闭'"
-            type="danger" link @click="handleClose(row)"
-          >关闭</el-button>
+            <el-button
+              v-if="canManage && row.status !== '已关闭'"
+              type="danger" size="small" @click="handleClose(row)"
+            >关闭</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -723,27 +727,27 @@ onMounted(() => {
 
     <!-- Admin edit dialog -->
     <el-dialog v-model="editVisible" title="编辑问题" width="700px">
-      <el-form ref="editFormRef" :model="editForm" label-width="110px">
+      <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="110px">
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="问题标题">
+            <el-form-item label="问题标题" prop="title" required>
               <el-input v-model="editForm.title" maxlength="20" show-word-limit />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="问题状态">
+            <el-form-item label="问题状态" prop="status" required>
               <el-select v-model="editForm.status" style="width: 100%">
                 <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
               </el-select>
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="问题详情">
+        <el-form-item label="问题详情" prop="description" required>
           <el-input v-model="editForm.description" type="textarea" :rows="3" maxlength="1000" show-word-limit />
         </el-form-item>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="提出部门">
+            <el-form-item label="提出部门" prop="submitterDepartment" required>
               <el-select v-model="editForm.submitterDepartment" style="width: 100%" clearable filterable>
                 <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.name" :disabled="!d.enabled" />
               </el-select>
@@ -832,6 +836,13 @@ onMounted(() => {
     <!-- Detail drawer -->
     <el-drawer v-model="detailVisible" title="问题详情" size="900px">
       <template v-if="detail">
+        <el-alert
+          title="问题永久解决状态才能标记完成整改，请确保永久解决方案已落实后再提交完成。"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px"
+        />
         <div class="detail-layout">
           <!-- Left: info -->
           <div class="detail-left">
@@ -925,8 +936,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
-:deep(.actions-col .cell) {
-  white-space: nowrap;
+.action-btns {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  align-items: center;
 }
 .long-text {
   white-space: pre-wrap;
@@ -970,8 +984,9 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   margin-bottom: 16px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
+  overflow-x: auto;
 }
 
 /* === Mobile === */

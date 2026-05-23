@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import {
@@ -16,6 +16,55 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const drawerVisible = ref(false)
+
+// Resizable sidebar
+const STORAGE_KEY = 'sidebar_width'
+const MIN_WIDTH = 140
+const MAX_WIDTH = 320
+const DEFAULT_WIDTH = 170
+
+function loadSidebarWidth() {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY)
+    const n = parseInt(v, 10)
+    if (!isNaN(n) && n >= MIN_WIDTH && n <= MAX_WIDTH) return n
+  } catch { /* ignore */ }
+  return DEFAULT_WIDTH
+}
+
+const sidebarWidth = ref(loadSidebarWidth())
+const resizing = ref(false)
+
+function onResizeStart(e) {
+  resizing.value = true
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  document.addEventListener('mousemove', onResizeMove)
+  document.addEventListener('mouseup', onResizeEnd)
+  e.preventDefault()
+}
+
+function onResizeMove(e) {
+  if (!resizing.value) return
+  const w = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX))
+  sidebarWidth.value = w
+}
+
+function onResizeEnd() {
+  resizing.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeEnd)
+  try { localStorage.setItem(STORAGE_KEY, String(sidebarWidth.value)) } catch { /* ignore */ }
+}
+
+onUnmounted(() => {
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeEnd)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+})
 
 const menuItems = [
   { path: '/dashboard', title: '首页', icon: HomeFilled },
@@ -43,7 +92,7 @@ function handleLogout() {
 <template>
   <el-container class="layout">
     <!-- Desktop sidebar -->
-    <el-aside class="desktop-sidebar" width="220px">
+    <el-aside class="desktop-sidebar" :width="sidebarWidth + 'px'">
       <div class="logo">科技管理平台</div>
       <el-menu
         :default-active="route.path"
@@ -51,6 +100,7 @@ function handleLogout() {
         background-color="#304156"
         text-color="#bfcbd9"
         active-text-color="#409EFF"
+        :collapse="sidebarWidth < 160"
       >
         <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
           <el-icon><component :is="item.icon" /></el-icon>
@@ -66,13 +116,14 @@ function handleLogout() {
           <span>{{ item.title }}</span>
         </el-menu-item>
       </el-menu>
+      <div class="resize-handle" @mousedown="onResizeStart" />
     </el-aside>
 
     <!-- Mobile drawer -->
     <el-drawer
       v-model="drawerVisible"
       direction="ltr"
-      size="240px"
+      size="220px"
       :with-header="false"
       class="mobile-drawer"
     >
@@ -136,6 +187,22 @@ function handleLogout() {
 .desktop-sidebar {
   background-color: #304156;
   overflow: hidden;
+  position: relative;
+  transition: none;
+}
+.resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background 0.15s;
+}
+.resize-handle:hover {
+  background: rgba(64, 158, 255, 0.4);
 }
 .logo {
   height: 60px;
