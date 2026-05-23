@@ -1,0 +1,16 @@
+<view class="page-container" wx:if="{{detail}}">
+  <view class="page-header"><text class="title">{{detail.title}}</text></view>
+  <view class="card">
+    <view class="card-body">
+      <view wx:for="{{detail.items}}" wx:key="id" class="cl-row">
+        <view class="cl-info">
+          <text class="cl-name">{{item.name}}</text>
+          <text class="cl-standard">{{item.standard || ''}}</text>
+        </view>
+        <view class="cl-check {{item.completed ? 'checked' : ''}}" data-id="{{item.id}}" bindtap="toggle">
+          <text wx:if="{{item.completed}}">✓</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

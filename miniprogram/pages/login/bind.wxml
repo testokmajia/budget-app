@@ -1,0 +1,12 @@
+<view class="page-container">
+  <view class="box">
+    <text class="title">绑定已有账号</text>
+    <text class="desc">你的微信号还未绑定系统账号，请输入已有账号密码完成绑定</text>
+    <view class="form">
+      <input placeholder="用户名" value="{{username}}" bindinput="onField" data-field="username"/>
+      <input placeholder="密码" password value="{{password}}" bindinput="onField" data-field="password"/>
+      <text wx:if="{{errorMsg}}" class="error-text">{{errorMsg}}</text>
+      <button class="btn-confirm" bindtap="handleBind" loading="{{loading}}">{{loading ? '绑定中...' : '绑定并登录'}}</button>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,36 @@
+<view class="page-container" wx:if="{{detail}}">
+  <view class="card">
+    <view class="card-header">{{detail.title}}</view>
+    <view class="card-body">
+      <view class="info-row"><text class="info-label">问题编号</text><text class="info-value">{{detail.issueCode}}</text></view>
+      <view class="info-row"><text class="info-label">状态</text><text class="info-value" style="color:{{statusColor(detail.status)}}">{{detail.status}}</text></view>
+      <view class="info-row"><text class="info-label">提出部门</text><text class="info-value">{{detail.submitterDepartment || '-'}}</text></view>
+      <view class="info-row"><text class="info-label">提出人</text><text class="info-value">{{detail.submitterName || '-'}}</text></view>
+      <view class="info-row"><text class="info-label">提出场合</text><text class="info-value">{{detail.occasionName || '-'}}</text></view>
+      <view class="info-row"><text class="info-label">问题类型</text><text class="info-value">{{detail.issueType || '-'}}</text></view>
+      <view class="info-row"><text class="info-label">责任团队</text><text class="info-value">{{detail.responsibleTeam || '-'}}</text></view>
+      <view class="info-row"><text class="info-label">责任人</text><text class="info-value">{{detail.responsiblePersonName || '-'}}</text></view>
+      <view class="info-row"><text class="info-label">提出时间</text><text class="info-value">{{detail.createdAt}}</text></view>
+      <block wx:if="{{detail.description}}"><view class="info-block"><text class="info-label">问题详情</text><text class="info-text">{{detail.description}}</text></view></block>
+      <block wx:if="{{detail.temporarySolution}}"><view class="info-block"><text class="info-label">临时整改方案</text><text class="info-text">{{detail.temporarySolution}}</text></view></block>
+      <block wx:if="{{detail.temporaryDeadline}}"><view class="info-row"><text class="info-label">临时整改时限</text><text class="info-value">{{detail.temporaryDeadline}}</text></view></block>
+      <block wx:if="{{detail.rootCause}}"><view class="info-block"><text class="info-label">产生原因</text><text class="info-text">{{detail.rootCause}}</text></view></block>
+      <block wx:if="{{detail.permanentSolution}}"><view class="info-block"><text class="info-label">永久解决方案</text><text class="info-text">{{detail.permanentSolution}}</text></view></block>
+      <block wx:if="{{detail.permanentDeadline}}"><view class="info-row"><text class="info-label">永久解决时限</text><text class="info-value">{{detail.permanentDeadline}}</text></view></block>
+    </view>
+  </view>
+
+  <view wx:if="{{detail.logs && detail.logs.length > 0}}" class="card">
+    <view class="card-header">操作日志</view>
+    <view class="card-body">
+      <view wx:for="{{detail.logs}}" wx:key="id" class="log-item">
+        <view class="log-dot"></view>
+        <view class="log-content">
+          <view class="log-header"><text class="log-action">{{item.action}}</text><text class="log-time">{{item.createdAt}}</text></view>
+          <text wx:if="{{item.remark}}" class="log-remark">{{item.remark}}</text>
+          <text class="log-operator">操作人：{{item.operatorName}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

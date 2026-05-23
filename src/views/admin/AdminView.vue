@@ -827,4 +827,29 @@ onMounted(() => {
   justify-content: flex-end;
   margin-top: 16px;
 }
+
+/* === Mobile === */
+@media (max-width: 768px) {
+  .user-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .user-filters {
+    flex-direction: column;
+  }
+  .user-filters .el-input,
+  .user-filters .el-select {
+    width: 100% !important;
+  }
+  :deep(.el-table) {
+    display: block;
+    overflow-x: auto;
+  }
+  :deep(.el-dialog) {
+    width: 95% !important;
+  }
+  :deep(.el-tabs__nav-wrap) {
+    overflow-x: auto;
+  }
+}
 </style>

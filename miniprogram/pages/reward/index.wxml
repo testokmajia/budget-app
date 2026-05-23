@@ -1,0 +1,26 @@
+<view class="page-container">
+  <view class="page-header"><text class="title">奖惩记录</text></view>
+  <view class="search-bar">
+    <picker class="picker" mode="selector" value="{{typeIdx}}" range="{{typeLabels}}" bindchange="onTypeChange">
+      <view class="picker-display">{{typeLabels[typeIdx]}}</view>
+    </picker>
+    <input placeholder="搜索..." bindconfirm="load" value="{{keyword}}" bindinput="onKeyword"/>
+  </view>
+  <view class="card">
+    <view class="card-body">
+      <view wx:if="{{list.length === 0}}" class="empty-state"><text>暂无记录</text></view>
+      <view wx:for="{{list}}" wx:key="id" class="item">
+        <view class="rw-top">
+          <text class="rw-type {{item.type === 'REWARD' ? 'c-success' : 'c-danger'}}">{{item.type === 'REWARD' ? '奖励' : '处罚'}}</text>
+          <text class="rw-date">{{item.date || ''}}</text>
+        </view>
+        <text class="rw-title">{{item.title}}</text>
+        <view class="rw-meta">
+          <text>{{item.department || ''}}</text>
+          <text wx:if="{{item.personName}}">· {{item.personName}}</text>
+        </view>
+        <text wx:if="{{item.description}}" class="rw-desc">{{item.description}}</text>
+      </view>
+    </view>
+  </view>
+</view>

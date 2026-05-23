@@ -31,6 +31,9 @@ public class User extends BaseEntity implements UserDetails {
     @Column(length = 20)
     private String phone;
 
+    @Column(unique = true, length = 64)
+    private String openId;
+
     @Column(nullable = false)
     private boolean enabled = true;
 
@@ -55,6 +58,8 @@ public class User extends BaseEntity implements UserDetails {
     public void setPosition(String position) { this.position = position; }
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+    public String getOpenId() { return openId; }
+    public void setOpenId(String openId) { this.openId = openId; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public Set<Role> getRoles() { return roles; }
     public void setRoles(Set<Role> roles) { this.roles = roles; }

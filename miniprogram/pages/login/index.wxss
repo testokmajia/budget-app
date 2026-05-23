@@ -1,0 +1,9 @@
+.box{display:flex;flex-direction:column;align-items:center;padding:80rpx 40rpx;text-align:center}
+.title{font-size:36rpx;font-weight:600;margin-bottom:20rpx}
+.desc{font-size:30rpx;color:#606266;margin-bottom:40rpx;line-height:1.6}
+.loading-text{padding:40rpx;color:#909399;font-size:28rpx}
+.error-text{padding:20rpx;color:#f56c6c;font-size:28rpx;margin-bottom:20rpx}
+.success-icon{width:80rpx;height:80rpx;border-radius:50%;background:#67c23a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:40rpx;margin-bottom:20rpx}
+.success-text{font-size:32rpx;color:#67c23a}
+.btn-confirm{width:100%;background:#409eff;color:#fff;font-size:30rpx;padding:20rpx;border-radius:8rpx;margin-top:20rpx}
+.btn-cancel{width:100%;background:#f5f7fa;color:#606266;font-size:30rpx;padding:20rpx;border-radius:8rpx;border:1rpx solid #dcdfe6;margin-top:20rpx}

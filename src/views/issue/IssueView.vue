@@ -463,6 +463,7 @@ onMounted(() => {
     </div>
 
     <!-- Table -->
+    <div class="table-wrap">
     <el-table :data="tableData" v-loading="loading" stripe border @sort-change="handleSortChange"
               :default-sort="{ prop: 'createdAt', order: 'descending' }">
       <el-table-column prop="issueCode" label="问题编号" min-width="170" sortable="custom" />
@@ -532,6 +533,7 @@ onMounted(() => {
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <!-- Pagination -->
     <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
@@ -799,11 +801,49 @@ onMounted(() => {
 .page-header h2 {
   margin: 0;
 }
+.table-wrap {
+  overflow-x: auto;
+}
 .search-bar {
   display: flex;
   gap: 10px;
   margin-bottom: 16px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+/* === Mobile === */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .search-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .search-bar .el-select,
+  .search-bar .el-date-picker,
+  .search-bar .el-button {
+    width: 100% !important;
+  }
+  .detail-layout {
+    flex-direction: column;
+  }
+  .detail-right {
+    width: 100%;
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid #ebeef5;
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+  :deep(.el-dialog) {
+    width: 95% !important;
+  }
+  :deep(.el-drawer) {
+    width: 100% !important;
+  }
 }
 </style>

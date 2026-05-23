@@ -1,0 +1,33 @@
+<view class="page-container">
+  <view class="page-header">
+    <text class="title">科技问题</text>
+    <button class="btn-submit" bindtap="goSubmit">+ 提交</button>
+  </view>
+
+  <view class="search-bar">
+    <picker class="picker" mode="selector" value="{{statusIdx}}" range="{{statusLabels}}" bindchange="onStatusChange">
+      <view class="picker-display">{{statusLabels[statusIdx]}}</view>
+    </picker>
+    <input placeholder="搜索标题..." bindconfirm="search" value="{{keyword}}" bindinput="onKeyword"/>
+  </view>
+
+  <view class="card">
+    <view class="card-body">
+      <view wx:if="{{list.length === 0}}" class="empty-state"><text>暂无问题</text></view>
+      <view wx:for="{{list}}" wx:key="id" class="issue-item" bindtap="goDetail" data-id="{{item.id}}">
+        <view class="issue-top">
+          <text class="issue-code">{{item.issueCode}}</text>
+          <text class="issue-status" style="color: {{statusColor(item.status)}}">{{item.status}}</text>
+        </view>
+        <text class="issue-title">{{item.title}}</text>
+        <view class="issue-meta">
+          <text>{{item.submitterDepartment || ''}}</text>
+          <text>·</text>
+          <text>{{item.submitterName || ''}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{hasMore}}" class="load-more" bindtap="loadMore"><text>加载更多</text></view>
+</view>

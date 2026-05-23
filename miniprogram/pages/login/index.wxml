@@ -1,0 +1,30 @@
+<view class="page-container">
+  <view class="box">
+    <text class="title">扫码登录确认</text>
+    <text class="desc">确认登录企业科技管理平台网页版？</text>
+
+    <block wx:if="{{loading}}">
+      <text class="loading-text">验证中...</text>
+    </block>
+
+    <block wx:if="{{errorMsg}}">
+      <text class="error-text">{{errorMsg}}</text>
+    </block>
+
+    <block wx:if="{{!loading && !confirmed && !needBind}}">
+      <button class="btn-confirm" bindtap="confirmLogin">确认登录</button>
+      <button class="btn-cancel" bindtap="goBack">取消</button>
+    </block>
+
+    <block wx:if="{{needBind}}">
+      <text class="desc">该微信号未绑定系统账号，请先绑定已有账号</text>
+      <button class="btn-confirm" bindtap="goBind">去绑定</button>
+      <button class="btn-cancel" bindtap="goBack">取消</button>
+    </block>
+
+    <block wx:if="{{confirmed}}">
+      <text class="success-icon">✓</text>
+      <text class="success-text">登录成功</text>
+    </block>
+  </view>
+</view>

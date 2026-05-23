@@ -50,3 +50,16 @@ a {
   flex-wrap: wrap;
   align-items: center;
 }
+
+/* === 移动端适配 === */
+@media (max-width: 768px) {
+  .page-container {
+    padding: 12px;
+  }
+  .page-header h2 {
+    font-size: 17px;
+  }
+  .search-bar {
+    gap: 8px;
+  }
+}

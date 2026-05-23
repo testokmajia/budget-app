@@ -1,0 +1,47 @@
+<view class="page-container">
+  <view class="page-header">
+    <text class="title">首页看板</text>
+    <view class="scan-btn" bindtap="handleScan">
+      <text class="scan-icon">📷</text>
+      <text class="scan-text">扫码登录</text>
+    </view>
+  </view>
+
+  <view class="stat-cards">
+    <view class="stat-card">
+      <text class="stat-num">{{stats.totalIssues}}</text>
+      <text class="stat-label">问题总数</text>
+    </view>
+    <view class="stat-card stat-warning">
+      <text class="stat-num">{{stats.pendingIssues}}</text>
+      <text class="stat-label">待处理</text>
+    </view>
+    <view class="stat-card stat-success">
+      <text class="stat-num">{{stats.completedIssues}}</text>
+      <text class="stat-label">已完成</text>
+    </view>
+    <view class="stat-card stat-info">
+      <text class="stat-num">{{stats.checklistProgress}}%</text>
+      <text class="stat-label">清单进度</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-header">最近问题</view>
+    <view class="card-body">
+      <view wx:if="{{recentIssues.length === 0}}" class="empty-state">
+        <text>暂无数据</text>
+      </view>
+      <view
+        wx:for="{{recentIssues}}"
+        wx:key="id"
+        class="issue-item"
+        bindtap="goIssue"
+        data-id="{{item.id}}"
+      >
+        <text class="issue-title">{{item.title}}</text>
+        <text class="issue-status" style="color: {{statusColor(item.status)}}">{{item.status}}</text>
+      </view>
+    </view>
+  </view>
+</view>

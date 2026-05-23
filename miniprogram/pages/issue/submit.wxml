@@ -1,0 +1,48 @@
+<view class="page-container">
+  <view class="page-header"><text class="title">提交问题</text></view>
+  <view class="card">
+    <view class="card-body">
+      <view class="fg">
+        <text class="fl">提出部门</text>
+        <picker mode="selector" value="{{deptIdx}}" range="{{deptNames}}" bindchange="onDept">
+          <view class="picker-display">{{deptNames[deptIdx] || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="fg">
+        <text class="fl">提出场合</text>
+        <picker mode="selector" value="{{occIdx}}" range="{{occNames}}" bindchange="onOcc">
+          <view class="picker-display">{{occNames[occIdx] || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="fg">
+        <text class="fl">问题标题</text>
+        <input placeholder="最多20字" value="{{title}}" bindinput="onField" data-field="title" maxlength="20"/>
+      </view>
+      <view class="fg">
+        <text class="fl">问题详情</text>
+        <textarea placeholder="最多1000字" value="{{description}}" bindinput="onField" data-field="description" maxlength="1000"/>
+      </view>
+      <view class="fg">
+        <text class="fl">问题类型</text>
+        <picker mode="selector" value="{{typeIdx}}" range="{{typeNames}}" bindchange="onType">
+          <view class="picker-display">{{typeNames[typeIdx] || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="fg">
+        <text class="fl">产生原因</text>
+        <textarea value="{{rootCause}}" bindinput="onField" data-field="rootCause"/>
+      </view>
+      <view class="fg">
+        <text class="fl">永久解决方案</text>
+        <textarea placeholder="最多1000字" value="{{permanentSolution}}" bindinput="onField" data-field="permanentSolution" maxlength="1000"/>
+      </view>
+      <view class="fg">
+        <text class="fl">永久解决时限</text>
+        <picker mode="date" value="{{permanentDeadline}}" bindchange="onDate">
+          <view class="picker-display">{{permanentDeadline || '请选择日期'}}</view>
+        </picker>
+      </view>
+      <button class="btn-primary" bindtap="submit">提 交</button>
+    </view>
+  </view>
+</view>

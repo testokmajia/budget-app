@@ -1,0 +1,9 @@
+.btn-submit{background:#409eff;color:#fff;font-size:26rpx;padding:10rpx 24rpx;border-radius:8rpx;line-height:1.5}
+.issue-item{padding:24rpx 0;border-bottom:1rpx solid #f0f0f0}
+.issue-item:last-child{border-bottom:none}
+.issue-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10rpx}
+.issue-code{font-size:24rpx;color:#909399}
+.issue-status{font-size:24rpx;font-weight:500}
+.issue-title{font-size:30rpx;margin-bottom:10rpx;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.issue-meta{display:flex;gap:6rpx;font-size:24rpx;color:#909399}
+.load-more{text-align:center;padding:20rpx;color:#606266;font-size:26rpx}

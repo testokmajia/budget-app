@@ -1,0 +1,10 @@
+.item{padding:24rpx 0;border-bottom:1rpx solid #f0f0f0}
+.item:last-child{border-bottom:none}
+.rw-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10rpx}
+.rw-type{font-size:26rpx;font-weight:600;padding:4rpx 12rpx;border-radius:6rpx;background:#f0f0f0}
+.c-success{color:#67c23a}
+.c-danger{color:#f56c6c}
+.rw-date{font-size:24rpx;color:#c0c4cc}
+.rw-title{font-size:30rpx;display:block;margin-bottom:8rpx}
+.rw-meta{font-size:24rpx;color:#909399;display:flex;gap:4rpx}
+.rw-desc{display:block;font-size:26rpx;color:#606266;margin-top:10rpx;line-height:1.5}

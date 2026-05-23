@@ -1,0 +1,101 @@
+page {
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', Arial, sans-serif;
+  font-size: 28rpx;
+  color: #303133;
+  background: #f5f7fa;
+}
+
+/* 通用容器 */
+.page-container {
+  padding: 20rpx;
+}
+
+.page-header {
+  padding: 24rpx 20rpx 16rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.page-header .title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #303133;
+}
+
+/* 搜索栏 */
+.search-bar {
+  display: flex;
+  gap: 12rpx;
+  padding: 0 20rpx 16rpx;
+  align-items: center;
+}
+
+.search-bar .picker {
+  flex: 1;
+}
+
+.search-bar input {
+  flex: 2;
+  border: 1rpx solid #dcdfe6;
+  border-radius: 8rpx;
+  padding: 12rpx 16rpx;
+  font-size: 26rpx;
+  background: #fff;
+}
+
+/* 卡片 */
+.card {
+  background: #fff;
+  border-radius: 12rpx;
+  margin: 0 20rpx 20rpx;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 24rpx;
+  border-bottom: 1rpx solid #dcdfe6;
+  font-size: 30rpx;
+  font-weight: 500;
+}
+
+.card-body {
+  padding: 24rpx;
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80rpx 0;
+  color: #a8abb2;
+  font-size: 28rpx;
+}
+
+/* 按钮 */
+.btn-primary {
+  width: 100%;
+  background: #409eff;
+  color: #fff;
+  font-size: 30rpx;
+  padding: 20rpx;
+  border-radius: 8rpx;
+  border: none;
+}
+
+.btn-primary::after {
+  border: none;
+}
+
+/* picker 模拟显示 */
+.picker-display {
+  border: 1rpx solid #dcdfe6;
+  border-radius: 8rpx;
+  padding: 12rpx 16rpx;
+  font-size: 26rpx;
+  color: #606266;
+  background: #fff;
+}

@@ -1,0 +1,49 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/checklist/index",
+    "pages/checklist/detail",
+    "pages/issue/index",
+    "pages/issue/submit",
+    "pages/issue/detail",
+    "pages/reward/index",
+    "pages/login/index",
+    "pages/login/bind"
+  ],
+  "window": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "科技管理平台",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#f5f7fa"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#409EFF",
+    "list": [
+      {
+        "text": "首页",
+        "pagePath": "pages/index/index",
+        "iconPath": "static/icons/home.png",
+        "selectedIconPath": "static/icons/home-active.png"
+      },
+      {
+        "text": "清单",
+        "pagePath": "pages/checklist/index",
+        "iconPath": "static/icons/list.png",
+        "selectedIconPath": "static/icons/list-active.png"
+      },
+      {
+        "text": "问题",
+        "pagePath": "pages/issue/index",
+        "iconPath": "static/icons/warning.png",
+        "selectedIconPath": "static/icons/warning-active.png"
+      },
+      {
+        "text": "奖惩",
+        "pagePath": "pages/reward/index",
+        "iconPath": "static/icons/trophy.png",
+        "selectedIconPath": "static/icons/trophy-active.png"
+      }
+    ]
+  }
+}

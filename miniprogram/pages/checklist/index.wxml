@@ -1,0 +1,18 @@
+<view class="page-container">
+  <view class="page-header"><text class="title">清单管理</text></view>
+  <view class="card">
+    <view class="card-body">
+      <view wx:if="{{list.length === 0}}" class="empty-state"><text>暂无清单</text></view>
+      <view wx:for="{{list}}" wx:key="id" class="item" bindtap="goDetail" data-id="{{item.id}}">
+        <view class="item-left">
+          <text class="item-name">{{item.title}}</text>
+          <text class="item-desc">{{item.description || ''}}</text>
+        </view>
+        <view class="item-right">
+          <text class="progress">{{item.progress || 0}}%</text>
+          <text class="arrow">></text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
