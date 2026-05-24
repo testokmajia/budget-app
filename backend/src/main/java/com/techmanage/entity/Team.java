@@ -22,6 +22,12 @@ public class Team {
     @Column(columnDefinition = "TEXT")
     private String members;
 
+    @Column(columnDefinition = "TEXT")
+    private String systems;
+
+    @Column(name = "system_owners", columnDefinition = "TEXT")
+    private String systemOwners;
+
     @Column(nullable = false)
     private boolean enabled = true;
 
@@ -35,6 +41,10 @@ public class Team {
     public void setLeader(String leader) { this.leader = leader; }
     public String getMembers() { return members; }
     public void setMembers(String members) { this.members = members; }
+    public String getSystems() { return systems; }
+    public void setSystems(String systems) { this.systems = systems; }
+    public String getSystemOwners() { return systemOwners; }
+    public void setSystemOwners(String systemOwners) { this.systemOwners = systemOwners; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 }

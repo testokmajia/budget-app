@@ -34,7 +34,6 @@ public class AdminController {
     // === 用户管理 ===
 
     @GetMapping("/users")
-    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_ISSUE_ADMIN')")
     public ApiResponse<PageResponse<UserResponse>> listUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -73,7 +72,6 @@ public class AdminController {
     }
 
     @GetMapping("/roles")
-    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_ISSUE_ADMIN')")
     public ApiResponse<List<Role>> listRoles() {
         return ApiResponse.ok(adminService.listRoles());
     }
@@ -81,7 +79,6 @@ public class AdminController {
     // === 问题分类管理 ===
 
     @GetMapping("/categories")
-    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_ISSUE_ADMIN')")
     public ApiResponse<List<IssueCategory>> listCategories() {
         return ApiResponse.ok(adminService.listCategories());
     }
@@ -109,7 +106,6 @@ public class AdminController {
     // === 部门管理 ===
 
     @GetMapping("/departments")
-    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_ISSUE_ADMIN')")
     public ApiResponse<List<Department>> listDepartments() {
         return ApiResponse.ok(adminService.listDepartments());
     }
@@ -137,7 +133,6 @@ public class AdminController {
     // === 所属系统管理 ===
 
     @GetMapping("/systems")
-    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_ISSUE_ADMIN')")
     public ApiResponse<List<SystemInfo>> listSystems() {
         return ApiResponse.ok(adminService.listSystems());
     }
@@ -165,7 +160,6 @@ public class AdminController {
     // === 团队管理 ===
 
     @GetMapping("/teams")
-    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_ISSUE_ADMIN')")
     public ApiResponse<List<Team>> listTeams() {
         return ApiResponse.ok(adminService.listTeams());
     }
@@ -193,7 +187,6 @@ public class AdminController {
     // === 提出场合管理 ===
 
     @GetMapping("/occasions")
-    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_ISSUE_ADMIN')")
     public ApiResponse<List<IssueOccasion>> listOccasions() {
         return ApiResponse.ok(adminService.listOccasions());
     }
@@ -280,11 +273,13 @@ public class AdminController {
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_ISSUE_ADMIN')")
     public ResponseEntity<byte[]> exportTeams() {
         var list = adminService.listTeams();
-        var headers = List.of("团队名称", "所属部门", "团队负责人", "团队成员", "状态");
+        var headers = List.of("团队名称", "所属部门", "团队负责人", "团队成员", "负责系统", "状态");
         List<List<String>> rows = list.stream().map(t -> List.of(
                 t.getName(), t.getDepartment() != null ? t.getDepartment() : "",
                 t.getLeader() != null ? t.getLeader() : "",
-                t.getMembers() != null ? t.getMembers() : "", t.isEnabled() ? "启用" : "禁用"
+                t.getMembers() != null ? t.getMembers() : "",
+                t.getSystems() != null ? t.getSystems() : "",
+                t.isEnabled() ? "启用" : "禁用"
         )).toList();
         return excelResponse("teams.xlsx", ExcelUtil.generate("团队管理", headers, rows));
     }

@@ -6,9 +6,9 @@ import com.techmanage.dto.RewardPunishmentResponse;
 import java.util.List;
 
 public interface RewardPunishmentService {
-    List<RewardPunishmentResponse> list(Long userId, boolean isAdmin);
+    List<RewardPunishmentResponse> list(Long userId, boolean canViewAll);
     RewardPunishmentResponse getById(Long id);
     RewardPunishmentResponse create(Long userId, RewardPunishmentRequest request);
-    RewardPunishmentResponse update(Long id, Long userId, RewardPunishmentRequest request);
-    void delete(Long id, Long userId);
+    RewardPunishmentResponse update(Long id, Long userId, boolean canEditAll, RewardPunishmentRequest request);
+    void delete(Long id, Long userId, boolean canEditAll);
 }

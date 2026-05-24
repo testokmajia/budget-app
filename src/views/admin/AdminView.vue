@@ -263,7 +263,7 @@ async function handleSystemSubmit() {
 // === 团队管理 ===
 const teams = ref([])
 const teamDialogVisible = ref(false)
-const teamForm = reactive({ name: '', department: '', leader: '', members: [], enabled: true })
+const teamForm = reactive({ name: '', department: '', leader: '', members: [], systems: [], systemOwners: '', enabled: true })
 
 const filteredMembers = computed(() => {
   if (!teamForm.department) return allUsers.value
@@ -287,14 +287,15 @@ async function fetchTeams() {
 function handleAddTeam() {
   isTeamEdit.value = false
   editTeamId.value = null
-  Object.assign(teamForm, { name: '', department: '', leader: '', members: [], enabled: true })
+  Object.assign(teamForm, { name: '', department: '', leader: '', members: [], systems: [], systemOwners: '', enabled: true })
   teamDialogVisible.value = true
 }
 function handleEditTeam(row) {
   isTeamEdit.value = true
   editTeamId.value = row.id
   const memberList = row.members ? row.members.split(',').map(s => s.trim()).filter(Boolean) : []
-  Object.assign(teamForm, { name: row.name, department: row.department || '', leader: row.leader || '', members: memberList, enabled: row.enabled })
+  const systemList = row.systems ? row.systems.split(',').map(s => s.trim()).filter(Boolean) : []
+  Object.assign(teamForm, { name: row.name, department: row.department || '', leader: row.leader || '', members: memberList, systems: systemList, systemOwners: row.systemOwners || '', enabled: row.enabled })
   teamDialogVisible.value = true
 }
 async function handleDeleteTeam(row) {
@@ -304,7 +305,7 @@ async function handleDeleteTeam(row) {
   fetchTeams()
 }
 async function handleTeamSubmit() {
-  const payload = { ...teamForm, members: teamForm.members.join(',') }
+  const payload = { ...teamForm, members: teamForm.members.join(','), systems: teamForm.systems.join(','), systemOwners: teamForm.systemOwners }
   if (isTeamEdit.value) {
     await updateTeam(editTeamId.value, payload)
     ElMessage.success('已更新')
@@ -557,7 +558,9 @@ onMounted(() => {
           </el-table-column>
           <el-table-column prop="department" label="所属部门" width="140" />
           <el-table-column prop="leader" label="团队负责人" width="120" />
-          <el-table-column prop="members" label="团队成员" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="members" label="团队成员" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="systems" label="负责系统" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="systemOwners" label="系统负责人" min-width="150" show-overflow-tooltip />
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
               <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
@@ -769,6 +772,14 @@ onMounted(() => {
           <el-select v-model="teamForm.members" style="width: 100%" multiple filterable placeholder="请选择团队成员">
             <el-option v-for="u in filteredMembers" :key="u.id" :label="u.name" :value="u.name" :disabled="!u.enabled" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="负责系统">
+          <el-select v-model="teamForm.systems" style="width: 100%" multiple filterable allow-create placeholder="输入系统名称（如人事系统、财务系统）">
+            <el-option v-for="s in teamForm.systems" :key="s" :label="s" :value="s" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="系统负责人">
+          <el-input v-model="teamForm.systemOwners" placeholder="系统名:负责人名，逗号分隔（如 财务系统:张三,人事系统:李四）" />
         </el-form-item>
         <el-form-item label="状态">
           <el-switch v-model="teamForm.enabled" active-text="启用" inactive-text="禁用" />

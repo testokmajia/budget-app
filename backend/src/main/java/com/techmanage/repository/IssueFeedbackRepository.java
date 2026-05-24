@@ -10,4 +10,5 @@ public interface IssueFeedbackRepository extends JpaRepository<IssueFeedback, Lo
         JpaSpecificationExecutor<IssueFeedback> {
 
     List<IssueFeedback> findBySubmitterIdOrderByCreatedAtDesc(Long submitterId);
+    IssueFeedback findTopByIssueCodeStartingWithOrderByIssueCodeDesc(String prefix);
 }

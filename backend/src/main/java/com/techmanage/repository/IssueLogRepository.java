@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface IssueLogRepository extends JpaRepository<IssueLog, Long> {
     List<IssueLog> findByIssueIdOrderByCreatedAtAsc(Long issueId);
+    List<IssueLog> findByIssueIdInOrderByCreatedAtAsc(List<Long> issueIds);
 }

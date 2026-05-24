@@ -24,8 +24,8 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
     }
 
     @Override
-    public List<RewardPunishmentResponse> list(Long userId, boolean isAdmin) {
-        if (isAdmin) {
+    public List<RewardPunishmentResponse> list(Long userId, boolean canViewAll) {
+        if (canViewAll) {
             return repository.findAllActive().stream().map(this::toResponse).toList();
         }
         String department = userRepository.findById(userId)
@@ -54,10 +54,10 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
     }
 
     @Override
-    public RewardPunishmentResponse update(Long id, Long userId, RewardPunishmentRequest request) {
+    public RewardPunishmentResponse update(Long id, Long userId, boolean canEditAll, RewardPunishmentRequest request) {
         var rp = repository.findById(id)
             .orElseThrow(() -> new RuntimeException("记录不存在"));
-        if (!rp.getCreatorId().equals(userId)) {
+        if (!canEditAll && !rp.getCreatorId().equals(userId)) {
             throw new RuntimeException("只能修改自己创建的记录");
         }
         applyRequest(rp, request);
@@ -66,10 +66,10 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
     }
 
     @Override
-    public void delete(Long id, Long userId) {
+    public void delete(Long id, Long userId, boolean canEditAll) {
         var rp = repository.findById(id)
             .orElseThrow(() -> new RuntimeException("记录不存在"));
-        if (!rp.getCreatorId().equals(userId)) {
+        if (!canEditAll && !rp.getCreatorId().equals(userId)) {
             throw new RuntimeException("只能删除自己创建的记录");
         }
         rp.setDeletedAt(LocalDateTime.now());

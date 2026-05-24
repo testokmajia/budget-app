@@ -15,8 +15,11 @@ export function assign(id, data) {
 export function submitSolution(id, data) {
   return request.put(`/issues/${id}/solution`, data)
 }
-export function complete(id) {
-  return request.put(`/issues/${id}/complete`)
+export function reviewByLeader(id, data) {
+  return request.put(`/issues/${id}/review-leader`, data)
+}
+export function reviewByAdmin(id, data) {
+  return request.put(`/issues/${id}/review-admin`, data)
 }
 export function confirm(id, data) {
   return request.put(`/issues/${id}/confirm`, data)
@@ -30,6 +33,23 @@ export function closeIssue(id, data) {
 export function updateIssue(id, data) {
   return request.put(`/issues/${id}`, data)
 }
+export function undoIssue(id) {
+  return request.put(`/issues/${id}/undo`)
+}
 export function exportIssues(params) {
   return request.get('/issues/export', { params, responseType: 'blob' })
+}
+
+// Change proposals
+export function submitChangeProposal(id, data) {
+  return request.post(`/issues/${id}/change-proposals`, data)
+}
+export function getPendingProposals() {
+  return request.get('/change-proposals/pending')
+}
+export function reviewProposal(id, data) {
+  return request.put(`/change-proposals/${id}/review`, data)
+}
+export function getIssueProposals(id) {
+  return request.get(`/issues/${id}/change-proposals`)
 }

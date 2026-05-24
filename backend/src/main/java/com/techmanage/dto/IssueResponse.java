@@ -27,6 +27,8 @@ public record IssueResponse(
     String permanentSolution,
     LocalDate permanentDeadline,
     String status,
+    Long lastOperatorId,
+    String system,
     List<IssueLogInfo> logs,
     LocalDateTime createdAt,
     LocalDateTime updatedAt

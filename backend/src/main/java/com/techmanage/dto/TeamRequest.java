@@ -7,5 +7,7 @@ public record TeamRequest(
     String department,
     String leader,
     String members,
+    String systems,
+    String systemOwners,
     boolean enabled
 ) {}

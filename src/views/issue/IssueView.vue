@@ -1,12 +1,14 @@
 <script setup>
-import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Download } from '@element-plus/icons-vue'
+import { Plus, Search, Download, ArrowDown, Edit, Share, UserFilled, DocumentAdd, Select, CircleCheck, CircleClose, CloseBold, Switch, MoreFilled, RefreshLeft } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { getList, getById, create, assign, submitSolution, complete, confirm, reject, closeIssue, updateIssue, exportIssues } from '@/api/issue'
-import { getUsers, getCategories, getDepartments, getTeams, getOccasions } from '@/api/admin'
+import { getList, getById, create, assign, submitSolution, reviewByLeader, reviewByAdmin, confirm, reject, closeIssue, updateIssue, exportIssues, submitChangeProposal, getPendingProposals, reviewProposal, undoIssue } from '@/api/issue'
+import { getUsers, getCategories, getDepartments, getTeams, getOccasions, getSystems } from '@/api/admin'
 
 const userStore = useUserStore()
+const route = useRoute()
 
 // === Table state ===
 const loading = ref(false)
@@ -32,8 +34,9 @@ const filters = reactive({
 
 const statusOptions = [
   { label: '待分派', value: '待分派' },
-  { label: '已分派', value: '已分派' },
-  { label: '整改中', value: '整改中' },
+  { label: '待员工处理', value: '待员工处理' },
+  { label: '待组长审核', value: '待组长审核' },
+  { label: '待管理员审核', value: '待管理员审核' },
   { label: '待确认', value: '待确认' },
   { label: '已完成', value: '已完成' },
   { label: '已驳回', value: '已驳回' },
@@ -46,6 +49,7 @@ const categories = ref([])
 const departments = ref([])
 const teams = ref([])
 const occasions = ref([])
+const systems = ref([])
 
 // === Create dialog ===
 const createVisible = ref(false)
@@ -77,7 +81,7 @@ const showMeetingFields = computed(() => {
 const assignVisible = ref(false)
 const assignId = ref(null)
 const assignFormRef = ref(null)
-const assignForm = reactive({ responsibleTeam: '', responsiblePersonId: null })
+const assignForm = reactive({ responsibleTeam: '', responsiblePersonId: null, system: '' })
 const assignRules = {
   responsibleTeam: [{ required: true, message: '请选择责任团队', trigger: 'change' }],
   responsiblePersonId: [{ required: true, message: '请选择责任人', trigger: 'change' }],
@@ -87,9 +91,27 @@ const selectedTeam = computed(() => {
   return teams.value.find(t => t.name === assignForm.responsibleTeam)
 })
 const teamMembers = computed(() => {
-  if (!selectedTeam.value || !selectedTeam.value.members) return []
-  const names = selectedTeam.value.members.split(',').map(s => s.trim()).filter(Boolean)
-  return allUsers.value.filter(u => names.includes(u.name))
+  if (!selectedTeam.value || !selectedTeam.value.members) {
+    if (selectedTeam.value && selectedTeam.value.leader) {
+      return allUsers.value.filter(u => u.name === selectedTeam.value.leader)
+    }
+    return []
+  }
+  const names = new Set(selectedTeam.value.members.split(',').map(s => s.trim()).filter(Boolean))
+  if (selectedTeam.value.leader) names.add(selectedTeam.value.leader)
+  return allUsers.value.filter(u => names.has(u.name))
+})
+const teamSystems = computed(() => {
+  if (!assignForm.responsibleTeam) return []
+  return systems.value.filter(s => s.team === assignForm.responsibleTeam && s.enabled)
+})
+watch(() => assignForm.system, (sysName) => {
+  if (!sysName) return
+  const sys = systems.value.find(s => s.name === sysName)
+  if (sys && sys.leader) {
+    const owner = allUsers.value.find(u => u.name === sys.leader)
+    if (owner) assignForm.responsiblePersonId = owner.id
+  }
 })
 
 // === Solution dialog ===
@@ -141,12 +163,69 @@ const editForm = reactive({
   permanentSolution: '',
   permanentDeadline: '',
   status: '',
+  system: '',
 })
 const editRules = {
   title: [{ required: true, message: '请输入问题标题', trigger: 'blur' }],
   description: [{ required: true, message: '请输入问题详情', trigger: 'blur' }],
   submitterDepartment: [{ required: true, message: '请选择提出部门', trigger: 'change' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }],
+}
+
+// === Workflow review dialog (leader/admin) ===
+const workflowReviewVisible = ref(false)
+const workflowReviewId = ref(null)
+const workflowReviewType = ref('leader') // 'leader' or 'admin'
+const workflowReviewComment = ref('')
+const workflowReviewing = ref(false)
+
+// === Change proposal ===
+const changeProposalVisible = ref(false)
+const changeProposalId = ref(null)
+const changeProposalFormRef = ref(null)
+const changeProposalForm = reactive({
+  temporarySolution: '',
+  temporaryDeadline: '',
+  rootCause: '',
+  permanentSolution: '',
+  permanentDeadline: '',
+})
+const changeProposalRules = {
+  temporarySolution: [{ required: true, message: '请输入临时整改方案', trigger: 'blur' }],
+  temporaryDeadline: [{ required: true, message: '请选择临时整改时限', trigger: 'change' }],
+}
+const submittingProposal = ref(false)
+
+// === Pending approvals (matched to issue rows) ===
+const pendingProposals = ref([])
+
+// === Review proposal ===
+const reviewVisible = ref(false)
+const reviewingProposal = ref(null)
+const reviewComment = ref('')
+const reviewing = ref(false)
+
+// === Shared action dropdown (single instance, no per-row Popper) ===
+const dropdownVisible = ref(false)
+const dropdownRow = ref(null)
+const dropdownPos = ref({ top: 0, left: 0 })
+function toggleDropdown(row, event) {
+  if (dropdownRow.value === row && dropdownVisible.value) {
+    dropdownVisible.value = false
+    return
+  }
+  dropdownRow.value = row
+  const rect = event.currentTarget.getBoundingClientRect()
+  dropdownPos.value = { top: rect.bottom + 4, left: rect.left }
+  nextTick(() => { dropdownVisible.value = true })
+}
+function closeDropdown() {
+  dropdownVisible.value = false
+}
+function onDocClick(e) {
+  if (!e.target.closest('.action-dropdown-trigger') && !e.target.closest('.action-dropdown-menu')) {
+    closeDropdown()
+  }
 }
 
 // === Detail drawer ===
@@ -165,16 +244,31 @@ const editSolutionForm = reactive({
 const savingSolution = ref(false)
 
 function canEditSolution(row) {
-  return isResponsiblePerson(row) && (row.status === '已分派' || row.status === '整改中')
+  if (!isResponsiblePerson(row)) return false
+  if (!isItEmployee.value) return false
+  if (row.status === '待确认') return false
+  if (row.status === '待分派') return false
+  return true
 }
 function startEditSolution() {
   const d = detail.value
-  editSolutionForm.temporarySolution = d.temporarySolution || ''
-  editSolutionForm.temporaryDeadline = d.temporaryDeadline || ''
-  editSolutionForm.rootCause = d.rootCause || ''
-  editSolutionForm.permanentSolution = d.permanentSolution || ''
-  editSolutionForm.permanentDeadline = d.permanentDeadline || ''
-  editingSolution.value = true
+  if (d.status === '待员工处理' || d.status === '已驳回') {
+    editSolutionForm.temporarySolution = d.temporarySolution || ''
+    editSolutionForm.temporaryDeadline = d.temporaryDeadline || ''
+    editSolutionForm.rootCause = d.rootCause || ''
+    editSolutionForm.permanentSolution = d.permanentSolution || ''
+    editSolutionForm.permanentDeadline = d.permanentDeadline || ''
+    editingSolution.value = true
+    return
+  }
+  // Later statuses → change proposal
+  changeProposalId.value = d.id
+  changeProposalForm.temporarySolution = d.temporarySolution || ''
+  changeProposalForm.temporaryDeadline = d.temporaryDeadline || ''
+  changeProposalForm.rootCause = d.rootCause || ''
+  changeProposalForm.permanentSolution = d.permanentSolution || ''
+  changeProposalForm.permanentDeadline = d.permanentDeadline || ''
+  changeProposalVisible.value = true
 }
 function cancelEditSolution() {
   editingSolution.value = false
@@ -191,7 +285,7 @@ async function saveEditSolution() {
   savingSolution.value = true
   try {
     await submitSolution(detail.value.id, { ...editSolutionForm })
-    ElMessage.success('方案已更新')
+    ElMessage.success('方案已提交，等待组长审核')
     editingSolution.value = false
     const res = await getById(detail.value.id)
     detail.value = res.data
@@ -200,10 +294,75 @@ async function saveEditSolution() {
   }
 }
 
+// === Change proposal handlers ===
+async function handleSubmitChangeProposal() {
+  const valid = await changeProposalFormRef.value.validate().catch(() => null)
+  if (!valid) return
+  submittingProposal.value = true
+  try {
+    await submitChangeProposal(changeProposalId.value, { ...changeProposalForm })
+    ElMessage.success('变更申请已提交，请等待审批')
+    changeProposalVisible.value = false
+  } finally {
+    submittingProposal.value = false
+  }
+}
+async function loadPendingProposals() {
+  try {
+    const res = await getPendingProposals()
+    pendingProposals.value = res.data || []
+  } catch { pendingProposals.value = [] }
+}
+function openProposalReview(p) {
+  reviewingProposal.value = p
+  reviewComment.value = ''
+  reviewVisible.value = true
+}
+async function handleReview(approved) {
+  reviewing.value = true
+  try {
+    await reviewProposal(reviewingProposal.value.id, { approved, comment: reviewComment.value })
+    ElMessage.success(approved ? '已批准' : '已拒绝')
+    reviewVisible.value = false
+    loadPendingProposals()
+    fetchData()
+  } finally {
+    reviewing.value = false
+  }
+}
+function hasFieldChanged(oldVal, newVal) {
+  const a = oldVal || ''
+  const b = newVal || ''
+  return a !== b
+}
+
 // === Permissions ===
 const isAdmin = computed(() => userStore.hasRole('ROLE_ADMIN'))
 const isIssueAdmin = computed(() => userStore.hasRole('ROLE_ISSUE_ADMIN'))
 const canManage = computed(() => isAdmin.value || isIssueAdmin.value)
+const isItEmployee = computed(() => userStore.user?.department === '信息科技部')
+const isTeamLeader = computed(() => {
+  if (!isItEmployee.value) return false
+  return teams.value.some(t => t.leader === userStore.user?.name)
+})
+const ledTeamMembers = computed(() => {
+  if (!isTeamLeader.value) return []
+  const memberNames = new Set()
+  teams.value.filter(t => t.leader === userStore.user?.name).forEach(t => {
+    if (t.members) t.members.split(',').map(s => s.trim()).filter(Boolean).forEach(n => memberNames.add(n))
+  })
+  return allUsers.value.filter(u => memberNames.has(u.name))
+})
+const hasActiveFilters = computed(() => {
+  return filters.submitterIds.length > 0 ||
+    filters.submitterDepartment ||
+    filters.occasionId ||
+    filters.issueType ||
+    filters.responsibleTeam ||
+    filters.responsiblePersonId ||
+    filters.dateFrom ||
+    filters.dateTo
+})
 
 // === Data fetching ===
 async function fetchData() {
@@ -224,9 +383,23 @@ async function fetchData() {
     if (filters.responsiblePersonId) params.responsiblePersonId = filters.responsiblePersonId
     if (filters.dateFrom) params.dateFrom = filters.dateFrom
     if (filters.dateTo) params.dateTo = filters.dateTo
+    params.myScope = !hasActiveFilters.value
     const res = await getList(params)
     tableData.value = res.data?.content || []
+    // pre-compute row actions
+    tableData.value.forEach(row => {
+      const actions = getRowActions(row)
+      row._primary = actions.length > 0 ? actions[0] : null
+      row._secondary = actions.length > 1 ? actions.slice(1) : []
+    })
     totalElements.value = res.data?.totalElements || 0
+    // match pending proposals to rows for approval actions
+    await loadPendingProposals()
+    const proposalMap = {}
+    pendingProposals.value.forEach(p => { proposalMap[p.issueId] = p })
+    tableData.value.forEach(row => {
+      row._pendingProposal = proposalMap[row.id] || null
+    })
   } finally {
     loading.value = false
   }
@@ -234,18 +407,20 @@ async function fetchData() {
 
 async function loadRefData() {
   try {
-    const [uRes, cRes, dRes, tRes, oRes] = await Promise.all([
+    const [uRes, cRes, dRes, tRes, oRes, sRes] = await Promise.all([
       getUsers({ size: 9999, enabled: true }).catch(() => ({})),
       getCategories().catch(() => ({})),
       getDepartments().catch(() => ({})),
       getTeams().catch(() => ({})),
       getOccasions().catch(() => ({})),
+      getSystems().catch(() => ({})),
     ])
     allUsers.value = uRes.data?.content || []
     categories.value = cRes.data || []
     departments.value = dRes.data || []
     teams.value = tRes.data || []
     occasions.value = oRes.data || []
+    systems.value = sRes.data || []
   } catch { /* ignore */ }
 }
 
@@ -254,7 +429,7 @@ function handleFilter() {
   currentPage.value = 1
   fetchData()
 }
-const defaultStatuses = computed(() => statusOptions.filter(s => s.value !== '已关闭').map(s => s.value))
+const defaultStatuses = computed(() => statusOptions.filter(s => s.value !== '已完成' && s.value !== '已关闭').map(s => s.value))
 
 function handleResetFilters() {
   Object.assign(filters, {
@@ -304,7 +479,8 @@ async function handleCreateSubmit() {
 function handleAssign(row) {
   assignId.value = row.id
   assignForm.responsibleTeam = row.responsibleTeam || ''
-  assignForm.responsiblePersonId = null
+  assignForm.responsiblePersonId = row.responsiblePersonId || null
+  assignForm.system = row.system || ''
   assignVisible.value = true
 }
 async function handleAssignSubmit() {
@@ -330,17 +506,39 @@ async function handleSolutionSubmit() {
   const valid = await solutionFormRef.value.validate().catch(() => null)
   if (!valid) return
   await submitSolution(solutionId.value, { ...solutionForm })
-  ElMessage.success('方案已提交')
+  ElMessage.success('方案已提交，等待组长审核')
   solutionVisible.value = false
   fetchData()
+  if (detailVisible.value && detail.value?.id === solutionId.value) {
+    const res = await getById(solutionId.value)
+    detail.value = res.data
+  }
 }
 
-// === Complete ===
-async function handleComplete(row) {
-  await ElMessageBox.confirm('确定提交完成吗？', '提示', { type: 'warning' })
-  await complete(row.id)
-  ElMessage.success('已提交完成，等待确认')
-  fetchData()
+// === Workflow review (leader/admin) ===
+function openLeaderReview(row) {
+  workflowReviewId.value = row.id
+  workflowReviewType.value = 'leader'
+  workflowReviewComment.value = ''
+  workflowReviewVisible.value = true
+}
+function openAdminReview(row) {
+  workflowReviewId.value = row.id
+  workflowReviewType.value = 'admin'
+  workflowReviewComment.value = ''
+  workflowReviewVisible.value = true
+}
+async function handleWorkflowReview(approved) {
+  workflowReviewing.value = true
+  try {
+    const api = workflowReviewType.value === 'leader' ? reviewByLeader : reviewByAdmin
+    await api(workflowReviewId.value, { approved, comment: workflowReviewComment.value })
+    ElMessage.success(approved ? '已通过' : '已退回')
+    workflowReviewVisible.value = false
+    fetchData()
+  } finally {
+    workflowReviewing.value = false
+  }
 }
 
 // === Confirm ===
@@ -349,7 +547,7 @@ async function handleConfirm(row, satisfied) {
   if (satisfied) {
     await ElMessageBox.confirm('确定该问题已整改完成吗？', title, { type: 'warning' })
     await confirm(row.id, { satisfied: true, remark: '' })
-    ElMessage.success('问题已关闭')
+    ElMessage.success('问题已完成')
   } else {
     const { value } = await ElMessageBox.prompt('请输入退回原因', title, {
       confirmButtonText: '确定退回',
@@ -409,6 +607,7 @@ function handleEdit(row) {
   editForm.permanentSolution = row.permanentSolution || ''
   editForm.permanentDeadline = row.permanentDeadline || ''
   editForm.status = row.status || ''
+  editForm.system = row.system || ''
   editVisible.value = true
 }
 async function handleEditSubmit() {
@@ -454,7 +653,7 @@ async function handleDetail(row) {
 
 // === Helpers ===
 function getStatusType(status) {
-  const map = { '待分派': 'info', '已分派': 'warning', '整改中': 'warning', '待确认': '', '已完成': 'success', '已驳回': 'danger', '已关闭': 'info' }
+  const map = { '待分派': 'info', '待员工处理': 'warning', '待组长审核': 'warning', '待管理员审核': '', '待确认': '', '已完成': 'success', '已驳回': 'danger', '已关闭': 'info' }
   return map[status] || ''
 }
 function formatDateTime(dt) {
@@ -466,6 +665,62 @@ function formatDateTime(dt) {
 function formatDate(d) { if (!d) return '-'; return d.split('T')[0] }
 function isResponsiblePerson(row) { return row.responsiblePersonId === userStore.user?.id }
 function isSubmitter(row) { return row.submitterId === userStore.user?.id }
+function isTeamLeaderForIssue(row) {
+  if (!isTeamLeader.value) return false
+  if (row.status !== '待组长审核') return false
+  return isResponsiblePerson(row) || ledTeamMembers.value.some(m => m.id === row.responsiblePersonId)
+}
+
+async function handleUndo(row) {
+  try {
+    await ElMessageBox.confirm('确定要撤回上一操作吗？', '撤回确认', { type: 'warning' })
+    await undoIssue(row.id)
+    ElMessage.success('已撤回')
+    fetchData()
+  } catch { /* canceled */ }
+}
+
+function getRowActions(row) {
+  const actions = []
+  // undo for last operator
+  if (row.lastOperatorId && row.lastOperatorId === userStore.user?.id
+      && !['已完成', '已关闭'].includes(row.status)) {
+    actions.push({ label: '撤回', icon: RefreshLeft, type: 'warning', handler: () => handleUndo(row) })
+  }
+  // change proposal approval
+  if (row._pendingProposal) {
+    actions.push({ label: '审批变更', icon: Select, type: 'warning', handler: () => openProposalReview(row._pendingProposal) })
+  }
+  // workflow actions
+  if (canManage.value && row.status === '待分派') {
+    actions.push({ label: '分派', icon: Share, type: 'primary', handler: () => handleAssign(row) })
+  }
+  if (isItEmployee.value && isResponsiblePerson(row) && (row.status === '待员工处理' || row.status === '已驳回')) {
+    actions.push({ label: '提交方案', icon: Edit, type: 'primary', handler: () => handleSolution(row) })
+  }
+  if (isTeamLeaderForIssue(row)) {
+    actions.push({ label: '审核', icon: Select, type: 'primary', handler: () => openLeaderReview(row) })
+  }
+  if (canManage.value && row.status === '待管理员审核') {
+    actions.push({ label: '审核', icon: Select, type: 'primary', handler: () => openAdminReview(row) })
+  }
+  if (row.status === '待确认' && isSubmitter(row)) {
+    actions.push({ label: '确认', icon: CircleCheck, type: 'success', handler: () => handleConfirm(row, true) })
+    actions.push({ label: '退回', icon: CircleClose, type: 'warning', handler: () => handleConfirm(row, false) })
+  }
+  // general
+  if (canManage.value && row.status !== '待确认') {
+    actions.push({ label: '编辑', icon: Edit, type: '', handler: () => handleEdit(row) })
+  }
+  // destructive
+  if (canManage.value && !['已完成','已关闭','已驳回'].includes(row.status)) {
+    actions.push({ label: '驳回', icon: CloseBold, type: 'danger', handler: () => handleReject(row) })
+  }
+  if (canManage.value && row.status !== '已关闭') {
+    actions.push({ label: '关闭', icon: Switch, type: 'danger', handler: () => handleClose(row) })
+  }
+  return actions
+}
 
 watch(() => createForm.occasionId, () => {
   if (!showMeetingFields.value) {
@@ -475,9 +730,17 @@ watch(() => createForm.occasionId, () => {
 })
 
 onMounted(() => {
-  filters.statuses = [...defaultStatuses.value]
+  document.addEventListener('click', onDocClick)
+  if (route.query.statuses) {
+    filters.statuses = route.query.statuses.split(',')
+  } else {
+    filters.statuses = [...defaultStatuses.value]
+  }
   fetchData()
   loadRefData()
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
 })
 </script>
 
@@ -550,43 +813,16 @@ onMounted(() => {
       <el-table-column prop="createdAt" label="提出日期" min-width="120" sortable="custom">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="290" fixed="right">
+      <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
           <div class="action-btns">
-            <el-button
-              v-if="canManage"
-              type="warning" size="small" @click="handleEdit(row)"
-            >编辑</el-button>
-
-            <el-button
-              v-if="canManage && (row.status === '待分派' || row.status === '已分派' || row.status === '整改中')"
-              type="primary" size="small" @click="handleAssign(row)"
-            >分派</el-button>
-
-            <el-button
-              v-if="canManage && row.status === '待分派'"
-              type="danger" size="small" @click="handleReject(row)"
-            >驳回</el-button>
-
-            <el-button
-              v-if="(row.status === '已分派' || row.status === '整改中') && isResponsiblePerson(row)"
-              type="primary" size="small" @click="handleSolution(row)"
-            >方案</el-button>
-
-            <el-button
-              v-if="row.status === '整改中' && isResponsiblePerson(row)"
-              type="success" size="small" @click="handleComplete(row)"
-            >完成</el-button>
-
-            <template v-if="row.status === '待确认' && isSubmitter(row)">
-              <el-button type="success" size="small" @click="handleConfirm(row, true)">确认</el-button>
-              <el-button type="warning" size="small" @click="handleConfirm(row, false)">退回</el-button>
-            </template>
-
-            <el-button
-              v-if="canManage && row.status !== '已关闭'"
-              type="danger" size="small" @click="handleClose(row)"
-            >关闭</el-button>
+            <el-button v-if="row._primary" :type="row._primary.type" size="small" @click="row._primary.handler">
+              {{ row._primary.label }}
+            </el-button>
+            <el-button v-if="row._secondary.length" size="small" class="action-dropdown-trigger" @click="toggleDropdown(row, $event)">
+              更多<el-icon style="margin-left:2px;font-size:12px"><ArrowDown /></el-icon>
+            </el-button>
+            <span v-if="!row._primary && !row._secondary.length" style="color: #c0c4cc">-</span>
           </div>
         </template>
       </el-table-column>
@@ -652,19 +888,27 @@ onMounted(() => {
     </el-dialog>
 
     <!-- Assign dialog -->
-    <el-dialog v-model="assignVisible" title="分配团队和责任人" width="480px">
+    <el-dialog v-model="assignVisible" title="分配团队、系统和责任人" width="480px">
       <el-form ref="assignFormRef" :model="assignForm" :rules="assignRules" label-width="100px">
         <el-form-item label="责任团队" prop="responsibleTeam">
-          <el-select v-model="assignForm.responsibleTeam" style="width: 100%" placeholder="请选择责任团队">
+          <el-select v-model="assignForm.responsibleTeam" style="width: 100%" placeholder="请选择责任团队" @change="assignForm.system = ''; assignForm.responsiblePersonId = null">
             <el-option v-for="t in teams" :key="t.id" :label="t.name" :value="t.name" :disabled="!t.enabled" />
           </el-select>
         </el-form-item>
+        <el-form-item label="涉及系统" v-if="assignForm.responsibleTeam">
+          <el-select v-model="assignForm.system" style="width: 100%" placeholder="请选择涉及系统" clearable filterable>
+            <el-option v-for="s in teamSystems" :key="s.id" :label="s.name" :value="s.name" />
+          </el-select>
+          <span v-if="teamSystems.length === 0" style="color: #909399; font-size: 12px;">
+            该团队未配置信息系统，请前往「系统管理 → 信息系统」配置
+          </span>
+        </el-form-item>
         <el-form-item label="责任人" prop="responsiblePersonId">
-          <el-select v-model="assignForm.responsiblePersonId" style="width: 100%" placeholder="请选择责任人">
+          <el-select v-model="assignForm.responsiblePersonId" style="width: 100%" placeholder="请选择责任人" clearable filterable>
             <el-option v-for="u in teamMembers" :key="u.id" :label="`${u.name} (${u.department || '-'})`" :value="u.id" />
           </el-select>
           <span v-if="assignForm.responsibleTeam && teamMembers.length === 0" style="color: #f56c6c; font-size: 12px;">
-            该团队暂无成员，请先为团队添加成员
+            该团队暂无成员
           </span>
         </el-form-item>
       </el-form>
@@ -722,6 +966,20 @@ onMounted(() => {
       <template #footer>
         <el-button @click="closeVisible = false">取消</el-button>
         <el-button type="danger" @click="handleCloseSubmit">确认关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Workflow review dialog -->
+    <el-dialog v-model="workflowReviewVisible" :title="workflowReviewType === 'leader' ? '负责人审核' : '管理员审核'" width="500px">
+      <el-form label-width="80px">
+        <el-form-item label="审核意见">
+          <el-input v-model="workflowReviewComment" type="textarea" :rows="3" placeholder="可选填写审核意见" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="workflowReviewVisible = false">取消</el-button>
+        <el-button type="danger" :loading="workflowReviewing" @click="handleWorkflowReview(false)">退回</el-button>
+        <el-button type="primary" :loading="workflowReviewing" @click="handleWorkflowReview(true)">通过</el-button>
       </template>
     </el-dialog>
 
@@ -802,6 +1060,13 @@ onMounted(() => {
               </el-select>
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="涉及系统">
+              <el-input v-model="editForm.system" placeholder="涉及系统" />
+            </el-form-item>
+          </el-col>
           <el-col :span="12">
             <el-form-item label="临时整改时限">
               <el-date-picker v-model="editForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
@@ -833,20 +1098,108 @@ onMounted(() => {
       </template>
     </el-dialog>
 
+    <!-- Change proposal dialog -->
+    <el-dialog v-model="changeProposalVisible" title="提交变更申请" width="600px">
+      <el-form ref="changeProposalFormRef" :model="changeProposalForm" :rules="changeProposalRules" label-width="110px">
+        <el-form-item label="临时整改方案" prop="temporarySolution">
+          <el-input v-model="changeProposalForm.temporarySolution" type="textarea" :rows="3" maxlength="2000" show-word-limit />
+        </el-form-item>
+        <el-form-item label="临时整改时限" prop="temporaryDeadline">
+          <el-date-picker v-model="changeProposalForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+        </el-form-item>
+        <el-form-item label="产生原因">
+          <el-input v-model="changeProposalForm.rootCause" type="textarea" :rows="2" maxlength="2000" />
+        </el-form-item>
+        <el-form-item label="永久解决方案">
+          <el-input v-model="changeProposalForm.permanentSolution" type="textarea" :rows="2" maxlength="1000" show-word-limit />
+        </el-form-item>
+        <el-form-item label="永久解决时限">
+          <el-date-picker v-model="changeProposalForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="changeProposalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submittingProposal" @click="handleSubmitChangeProposal">提交申请</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Review proposal dialog -->
+    <el-dialog v-model="reviewVisible" title="审核变更" width="900px">
+      <template v-if="reviewingProposal">
+        <div class="review-header">
+          <div><strong>{{ reviewingProposal.issueCode }}</strong> — {{ reviewingProposal.issueTitle }}</div>
+          <div style="color: #909399; font-size: 13px">
+            申请人: {{ reviewingProposal.proposerName }} · {{ formatDateTime(reviewingProposal.createdAt) }}
+          </div>
+        </div>
+        <el-divider />
+        <div class="diff-list">
+          <div class="diff-item" v-for="item in [
+            { label: '临时整改方案', old: reviewingProposal.oldTemporarySolution, new: reviewingProposal.newTemporarySolution },
+            { label: '临时整改时限', old: reviewingProposal.oldTemporaryDeadline, new: reviewingProposal.newTemporaryDeadline },
+            { label: '产生原因', old: reviewingProposal.oldRootCause, new: reviewingProposal.newRootCause },
+            { label: '永久解决方案', old: reviewingProposal.oldPermanentSolution, new: reviewingProposal.newPermanentSolution },
+            { label: '永久解决时限', old: reviewingProposal.oldPermanentDeadline, new: reviewingProposal.newPermanentDeadline },
+          ]" :key="item.label">
+            <div class="diff-label">{{ item.label }}</div>
+            <div class="diff-cols" :class="{ 'diff-changed': hasFieldChanged(item.old, item.new) }">
+              <div class="diff-col diff-old">
+                <div class="diff-col-label">旧值</div>
+                <div class="diff-col-value">{{ item.old || '（空）' }}</div>
+              </div>
+              <div class="diff-arrow">→</div>
+              <div class="diff-col diff-new">
+                <div class="diff-col-label">新值</div>
+                <div class="diff-col-value">{{ item.new || '（空）' }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <el-divider />
+        <el-form label-width="80px">
+          <el-form-item label="审批备注">
+            <el-input v-model="reviewComment" type="textarea" :rows="2" placeholder="可选填写审批意见" />
+          </el-form-item>
+        </el-form>
+        <div v-if="reviewingProposal.status === 'PENDING_TEAM_LEADER' && reviewingProposal.teamLeaderReviewComment" style="margin-bottom: 8px; font-size: 13px; color: #909399">
+          组长已审批: {{ reviewingProposal.teamLeaderReviewComment }}
+        </div>
+      </template>
+      <template #footer>
+        <el-button @click="reviewVisible = false">取消</el-button>
+        <el-button type="danger" :loading="reviewing" @click="handleReview(false)">拒绝</el-button>
+        <el-button type="primary" :loading="reviewing" @click="handleReview(true)">批准</el-button>
+      </template>
+    </el-dialog>
+
     <!-- Detail drawer -->
     <el-drawer v-model="detailVisible" title="问题详情" size="900px">
       <template v-if="detail">
-        <el-alert
-          title="问题永久解决状态才能标记完成整改，请确保永久解决方案已落实后再提交完成。"
-          type="info"
-          :closable="false"
-          show-icon
-          style="margin-bottom: 16px"
-        />
+        <div class="detail-status-bar">
+          <div class="detail-status-item">
+            <span class="detail-status-label">当前状态</span>
+            <el-tag :type="getStatusType(detail.status)" size="large">{{ detail.status }}</el-tag>
+          </div>
+          <div class="detail-status-item">
+            <span class="detail-status-label">当前处理人</span>
+            <span class="detail-status-value">{{ detail.responsiblePersonName || '待分派' }}</span>
+            <span v-if="detail.responsibleTeam" style="color: #909399; font-size: 12px; margin-left: 4px">({{ detail.responsibleTeam }})</span>
+          </div>
+        </div>
         <div class="detail-layout">
           <!-- Left: info -->
           <div class="detail-left">
             <div class="detail-header-actions">
+              <el-button
+                v-if="detail.lastOperatorId === userStore.user?.id && !['已完成','已关闭'].includes(detail.status)"
+                type="warning" size="small"
+                @click="handleUndo(detail)"
+              >撤回</el-button>
+              <el-button
+                v-if="isTeamLeaderForIssue(detail)"
+                type="primary" size="small"
+                @click="openLeaderReview(detail)"
+              >审核</el-button>
               <el-button
                 v-if="canEditSolution(detail)"
                 type="primary" size="small"
@@ -867,6 +1220,7 @@ onMounted(() => {
               <el-descriptions-item label="问题类型">{{ detail.issueType || '-' }}</el-descriptions-item>
               <el-descriptions-item label="责任团队">{{ detail.responsibleTeam || '未分配' }}</el-descriptions-item>
               <el-descriptions-item label="责任人">{{ detail.responsiblePersonName || '未分配' }}</el-descriptions-item>
+              <el-descriptions-item label="涉及系统">{{ detail.system || '未指定' }}</el-descriptions-item>
 
               <template v-if="editingSolution">
                 <el-descriptions-item label="临时整改方案">
@@ -932,6 +1286,25 @@ onMounted(() => {
         </div>
       </template>
     </el-drawer>
+
+    <!-- Shared action dropdown menu (single instance, avoids per-row Popper overhead) -->
+    <teleport to="body">
+      <div
+        v-if="dropdownVisible && dropdownRow"
+        class="action-dropdown-menu"
+        :style="{ top: dropdownPos.top + 'px', left: dropdownPos.left + 'px' }"
+        @click.stop
+      >
+        <div
+          v-for="act in dropdownRow._secondary"
+          :key="act.label"
+          class="action-dropdown-item"
+          @click="act.handler(); closeDropdown()"
+        >
+          {{ act.label }}
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -942,12 +1315,59 @@ onMounted(() => {
   flex-wrap: nowrap;
   align-items: center;
 }
+
+.action-btns :deep(.el-button--small) {
+  border-radius: 6px;
+}
+.action-dropdown-menu {
+  position: fixed;
+  z-index: 3000;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  padding: 4px 0;
+  min-width: 120px;
+}
+.action-dropdown-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #606266;
+  transition: background 0.15s;
+}
+.action-dropdown-item:hover {
+  background: #f5f7fa;
+}
 .long-text {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
   max-height: 200px;
   overflow-y: auto;
+}
+.detail-status-bar {
+  display: flex;
+  gap: 32px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+.detail-status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.detail-status-label {
+  font-size: 13px;
+  color: #909399;
+}
+.detail-status-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
 }
 .detail-layout {
   display: flex;
@@ -987,6 +1407,101 @@ onMounted(() => {
   flex-wrap: nowrap;
   align-items: center;
   overflow-x: auto;
+}
+
+/* === Change proposal === */
+.proposal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.proposal-card {
+  padding: 14px 16px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.proposal-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.proposal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.proposal-code {
+  font-weight: 600;
+  color: #1d2129;
+}
+.proposal-title {
+  font-size: 14px;
+  color: #303133;
+  margin-bottom: 6px;
+}
+.proposal-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #909399;
+}
+.review-header {
+  margin-bottom: 4px;
+}
+.diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.diff-item {
+  padding: 10px 14px;
+  background: #f7f8fa;
+  border-radius: 8px;
+}
+.diff-label {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: #303133;
+}
+.diff-cols {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.diff-cols.diff-changed {
+  background: #ecf5ff;
+  padding: 8px;
+  border-radius: 6px;
+  border-left: 3px solid #409eff;
+  margin: 0 -8px;
+}
+.diff-col {
+  flex: 1;
+  min-width: 0;
+}
+.diff-col-label {
+  font-size: 11px;
+  color: #909399;
+  margin-bottom: 2px;
+}
+.diff-col-value {
+  font-size: 13px;
+  color: #303133;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.diff-arrow {
+  font-size: 18px;
+  color: #909399;
+  align-self: center;
+  flex-shrink: 0;
+}
+.diff-changed .diff-new .diff-col-value {
+  color: #409eff;
+  font-weight: 500;
 }
 
 /* === Mobile === */

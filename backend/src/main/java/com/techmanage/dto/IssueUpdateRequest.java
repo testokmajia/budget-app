@@ -17,5 +17,6 @@ public record IssueUpdateRequest(
     String rootCause,
     String permanentSolution,
     LocalDate permanentDeadline,
-    String status
+    String status,
+    String system
 ) {}

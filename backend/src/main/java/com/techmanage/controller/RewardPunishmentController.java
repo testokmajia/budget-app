@@ -24,9 +24,10 @@ public class RewardPunishmentController {
     @GetMapping
     public ApiResponse<List<RewardPunishmentResponse>> list(Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
-        boolean isAdmin = auth.getAuthorities().stream()
-            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-        return ApiResponse.ok(service.list(userId, isAdmin));
+        boolean canViewAll = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")
+                || a.getAuthority().equals("ROLE_CLERK"));
+        return ApiResponse.ok(service.list(userId, canViewAll));
     }
 
     @GetMapping("/{id}")
@@ -48,14 +49,20 @@ public class RewardPunishmentController {
                                                         Authentication auth,
                                                         @Valid @RequestBody RewardPunishmentRequest request) {
         Long userId = (Long) auth.getPrincipal();
-        return ApiResponse.ok(service.update(id, userId, request));
+        boolean canEditAll = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")
+                || a.getAuthority().equals("ROLE_CLERK"));
+        return ApiResponse.ok(service.update(id, userId, canEditAll, request));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ROLE_CLERK', 'ROLE_ADMIN')")
     public ApiResponse<Void> delete(@PathVariable Long id, Authentication auth) {
         Long userId = (Long) auth.getPrincipal();
-        service.delete(id, userId);
+        boolean canEditAll = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")
+                || a.getAuthority().equals("ROLE_CLERK"));
+        service.delete(id, userId, canEditAll);
         return ApiResponse.ok();
     }
 }

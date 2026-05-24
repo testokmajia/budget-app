@@ -252,6 +252,8 @@ public class AdminServiceImpl implements AdminService {
         team.setDepartment(request.department());
         team.setLeader(request.leader());
         team.setMembers(request.members());
+        team.setSystems(request.systems());
+        team.setSystemOwners(request.systemOwners());
         team.setEnabled(request.enabled());
         return teamRepository.save(team);
     }
@@ -264,6 +266,8 @@ public class AdminServiceImpl implements AdminService {
         team.setDepartment(request.department());
         team.setLeader(request.leader());
         team.setMembers(request.members());
+        team.setSystems(request.systems());
+        team.setSystemOwners(request.systemOwners());
         team.setEnabled(request.enabled());
         return teamRepository.save(team);
     }

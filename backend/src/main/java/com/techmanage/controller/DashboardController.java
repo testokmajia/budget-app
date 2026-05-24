@@ -2,18 +2,25 @@ package com.techmanage.controller;
 
 import com.techmanage.common.ApiResponse;
 import com.techmanage.dto.DashboardStats;
+import com.techmanage.entity.Checklist;
 import com.techmanage.entity.IssueFeedback;
 import com.techmanage.entity.Team;
+import com.techmanage.entity.User;
+import com.techmanage.repository.ChecklistRepository;
 import com.techmanage.repository.IssueFeedbackRepository;
 import com.techmanage.repository.TeamRepository;
+import com.techmanage.repository.UserRepository;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -21,19 +28,32 @@ import java.util.stream.Collectors;
 public class DashboardController {
 
     private static final List<String> STATUS_ORDER = Arrays.asList(
-        "待分派", "已分派", "整改中", "待确认", "已完成", "已驳回", "已关闭"
+        "待分派", "待员工处理", "待组长审核", "待管理员审核", "待确认", "已完成", "已驳回", "已关闭"
     );
 
     private final IssueFeedbackRepository issueRepository;
     private final TeamRepository teamRepository;
+    private final UserRepository userRepository;
+    private final ChecklistRepository checklistRepository;
 
-    public DashboardController(IssueFeedbackRepository issueRepository, TeamRepository teamRepository) {
+    public DashboardController(IssueFeedbackRepository issueRepository,
+                               TeamRepository teamRepository,
+                               UserRepository userRepository,
+                               ChecklistRepository checklistRepository) {
         this.issueRepository = issueRepository;
         this.teamRepository = teamRepository;
+        this.userRepository = userRepository;
+        this.checklistRepository = checklistRepository;
     }
 
     @GetMapping("/stats")
-    public ApiResponse<DashboardStats> stats() {
+    public ApiResponse<DashboardStats> stats(Authentication auth) {
+        Long userId = (Long) auth.getPrincipal();
+        boolean isAdmin = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        boolean isIssueAdmin = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_ISSUE_ADMIN"));
+
         List<IssueFeedback> allIssues = issueRepository.findAll();
 
         // Status distribution
@@ -43,7 +63,7 @@ public class DashboardController {
             .map(s -> new DashboardStats.StatusCount(s, statusMap.getOrDefault(s, 0L)))
             .toList();
 
-        // Team distribution (only assigned issues, grouped by responsibleTeam)
+        // Team distribution
         Map<String, Long> teamMap = allIssues.stream()
             .filter(i -> i.getResponsibleTeam() != null && !i.getResponsibleTeam().isBlank())
             .collect(Collectors.groupingBy(IssueFeedback::getResponsibleTeam, Collectors.counting()));
@@ -80,10 +100,109 @@ public class DashboardController {
             .filter(tp -> tp.memberCount() > 0)
             .toList();
 
+        // Pending tasks for current user
+        List<DashboardStats.PendingTask> pendingTasks = new ArrayList<>();
+        boolean canManage = isAdmin || isIssueAdmin;
+
+        if (canManage) {
+            long todoAssign = allIssues.stream().filter(i -> "待分派".equals(i.getStatus())).count();
+            if (todoAssign > 0) {
+                pendingTasks.add(new DashboardStats.PendingTask(
+                    "待分派问题", "需要分配责任团队和责任人", todoAssign,
+                    "Issue", "statuses=待分派"
+                ));
+            }
+            long todoAdminReview = allIssues.stream().filter(i -> "待管理员审核".equals(i.getStatus())).count();
+            if (todoAdminReview > 0) {
+                pendingTasks.add(new DashboardStats.PendingTask(
+                    "待管理员审核", "问题整改方案需要管理员审核", todoAdminReview,
+                    "Issue", "statuses=待管理员审核"
+                ));
+            }
+        }
+
+        // IT employee pending tasks
+        User currentUser = userRepository.findById(userId).orElse(null);
+        String userName = currentUser != null ? currentUser.getName() : "";
+        boolean isItEmployee = currentUser != null && "信息科技部".equals(currentUser.getDepartment());
+
+        if (isItEmployee) {
+            // Tasks assigned to me
+            long myTasks = allIssues.stream()
+                .filter(i -> "待员工处理".equals(i.getStatus()) && userId.equals(i.getResponsiblePersonId()))
+                .count();
+            if (myTasks > 0) {
+                pendingTasks.add(new DashboardStats.PendingTask(
+                    "待处理问题", "分配给您的整改任务", myTasks,
+                    "Issue", "statuses=待员工处理"
+                ));
+            }
+            // My rejected issues
+            long myRejected = allIssues.stream()
+                .filter(i -> "已驳回".equals(i.getStatus()) && userId.equals(i.getResponsiblePersonId()))
+                .count();
+            if (myRejected > 0) {
+                pendingTasks.add(new DashboardStats.PendingTask(
+                    "已驳回问题", "被退回需要重新整改", myRejected,
+                    "Issue", "statuses=已驳回"
+                ));
+            }
+            // Team leader review
+            List<Team> ledTeams = teamRepository.findByLeader(userName);
+            if (!ledTeams.isEmpty()) {
+                Set<String> memberNames = ledTeams.stream()
+                    .flatMap(t -> {
+                        if (t.getMembers() == null || t.getMembers().isBlank()) return java.util.stream.Stream.empty();
+                        return Arrays.stream(t.getMembers().split(",")).map(String::trim).filter(s -> !s.isEmpty());
+                    })
+                    .collect(Collectors.toSet());
+                if (ledTeams.size() > 0 && currentUser.getName() != null) {
+                    memberNames.add(currentUser.getName());
+                }
+                Set<Long> memberIds = userRepository.findByNameIn(new ArrayList<>(memberNames)).stream()
+                    .map(User::getId).collect(Collectors.toSet());
+
+                long leaderReview = allIssues.stream()
+                    .filter(i -> "待组长审核".equals(i.getStatus())
+                        && i.getResponsiblePersonId() != null
+                        && memberIds.contains(i.getResponsiblePersonId()))
+                    .count();
+                if (leaderReview > 0) {
+                    pendingTasks.add(new DashboardStats.PendingTask(
+                        "待组长审核", "团队成员提交的方案需要审核", leaderReview,
+                        "Issue", "statuses=待组长审核"
+                    ));
+                }
+            }
+        }
+
+        // Issues pending confirmation (submitted by me)
+        long myConfirm = allIssues.stream()
+            .filter(i -> "待确认".equals(i.getStatus()) && userId.equals(i.getSubmitterId()))
+            .count();
+        if (myConfirm > 0) {
+            pendingTasks.add(new DashboardStats.PendingTask(
+                "待确认完成", "您提交的问题等待确认", myConfirm,
+                "Issue", "statuses=待确认"
+            ));
+        }
+
+        // Pending checklists
+        long pendingChecklists = checklistRepository.findByUserId(userId).stream()
+            .filter(c -> !"已完成".equals(c.getStatus()))
+            .count();
+        if (pendingChecklists > 0) {
+            pendingTasks.add(new DashboardStats.PendingTask(
+                "待办清单", "清单管理中未完成的事项", pendingChecklists,
+                "Checklist", ""
+            ));
+        }
+
         return ApiResponse.ok(new DashboardStats(
             statusCounts, teamDistribution,
             new DashboardStats.OverdueInfo(tempOverdue, permOverdue),
-            personnel
+            personnel,
+            pendingTasks
         ));
     }
 }

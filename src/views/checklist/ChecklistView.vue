@@ -1,11 +1,18 @@
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Edit, Delete, Check } from '@element-plus/icons-vue'
+import { Plus, Search, Edit, Delete, Check, ArrowDown } from '@element-plus/icons-vue'
+import { useUserStore } from '@/stores/user'
 import { getList, create, update, complete, remove } from '@/api/checklist'
+import { getUsers } from '@/api/admin'
+
+const userStore = useUserStore()
+const currentUserId = userStore.user?.id
+const currentUserName = userStore.user?.name
 
 const loading = ref(false)
 const tableData = ref([])
+const allUsers = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const isEdit = ref(false)
@@ -37,7 +44,7 @@ const form = reactive({
   sourceDetail: '',
   description: '',
   status: '待办',
-  responsiblePerson: '',
+  responsiblePerson: currentUserName || '',
   plannedDate: '',
   actualDate: '',
   remark: '',
@@ -49,7 +56,6 @@ const rules = {
   status: [{ required: true, message: '请选择状态', trigger: 'change' }],
 }
 
-// 来源详情占位提示
 const sourceDetailPlaceholder = computed(() => {
   const map = {
     '领导交办': '请输入领导姓名',
@@ -63,6 +69,37 @@ const showSourceDetail = computed(() => {
   return form.source && form.source !== '自行安排'
 })
 
+// === Shared action dropdown ===
+const dropdownVisible = ref(false)
+const dropdownRow = ref(null)
+const dropdownPos = ref({ top: 0, left: 0 })
+function toggleDropdown(row, event) {
+  if (dropdownRow.value === row && dropdownVisible.value) {
+    dropdownVisible.value = false
+    return
+  }
+  dropdownRow.value = row
+  const rect = event.currentTarget.getBoundingClientRect()
+  dropdownPos.value = { top: rect.bottom + 4, left: rect.left }
+  nextTick(() => { dropdownVisible.value = true })
+}
+function closeDropdown() { dropdownVisible.value = false }
+function onDocClick(e) {
+  if (!e.target.closest('.action-dropdown-trigger') && !e.target.closest('.action-dropdown-menu')) {
+    closeDropdown()
+  }
+}
+
+function getRowActions(row) {
+  const actions = []
+  if (row.status !== '已完成') {
+    actions.push({ label: '完成', icon: Check, type: 'success', handler: () => handleComplete(row) })
+  }
+  actions.push({ label: '编辑', icon: Edit, type: 'primary', handler: () => handleEdit(row) })
+  actions.push({ label: '删除', icon: Delete, type: 'danger', handler: () => handleDelete(row) })
+  return actions
+}
+
 async function fetchData() {
   loading.value = true
   try {
@@ -73,10 +110,22 @@ async function fetchData() {
     if (searchForm.startDate) params.startDate = searchForm.startDate
     if (searchForm.endDate) params.endDate = searchForm.endDate
     const res = await getList(params)
-    tableData.value = res.data || []
+    tableData.value = (res.data || []).map(row => {
+      const actions = getRowActions(row)
+      row._primary = actions.length > 0 ? actions[0] : null
+      row._secondary = actions.length > 1 ? actions.slice(1) : []
+      return row
+    })
   } finally {
     loading.value = false
   }
+}
+
+async function loadUsers() {
+  try {
+    const res = await getUsers({ size: 9999, enabled: true })
+    allUsers.value = res.data?.content || []
+  } catch { /* ignore */ }
 }
 
 function resetForm() {
@@ -85,7 +134,7 @@ function resetForm() {
     sourceDetail: '',
     description: '',
     status: '待办',
-    responsiblePerson: '',
+    responsiblePerson: currentUserName || '',
     plannedDate: '',
     actualDate: '',
     remark: '',
@@ -157,7 +206,14 @@ function getStatusType(status) {
   return { '待办': '', '进行中': 'warning', '已完成': 'success' }[status] || ''
 }
 
-onMounted(fetchData)
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  fetchData()
+  loadUsers()
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+})
 </script>
 
 <template>
@@ -196,11 +252,17 @@ onMounted(fetchData)
       <el-table-column prop="responsiblePerson" label="责任人" width="90" />
       <el-table-column prop="plannedDate" label="计划完成" width="110" />
       <el-table-column prop="actualDate" label="实际完成" width="110" />
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="row.status !== '已完成'" type="success" link :icon="Check" @click="handleComplete(row)">完成</el-button>
-          <el-button type="primary" link :icon="Edit" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="danger" link :icon="Delete" @click="handleDelete(row)">删除</el-button>
+          <div class="action-btns">
+            <el-button v-if="row._primary" :type="row._primary.type" size="small" @click="row._primary.handler">
+              {{ row._primary.label }}
+            </el-button>
+            <el-button v-if="row._secondary.length" size="small" class="action-dropdown-trigger" @click="toggleDropdown(row, $event)">
+              更多<el-icon style="margin-left:2px;font-size:12px"><ArrowDown /></el-icon>
+            </el-button>
+            <span v-if="!row._primary && !row._secondary.length" style="color: #c0c4cc">-</span>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -224,7 +286,9 @@ onMounted(fetchData)
           </el-select>
         </el-form-item>
         <el-form-item label="责任人">
-          <el-input v-model="form.responsiblePerson" />
+          <el-select v-model="form.responsiblePerson" style="width: 100%" filterable clearable placeholder="请选择责任人">
+            <el-option v-for="u in allUsers" :key="u.id" :label="u.name" :value="u.name" />
+          </el-select>
         </el-form-item>
         <el-form-item label="计划完成时间">
           <el-date-picker v-model="form.plannedDate" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
@@ -241,6 +305,25 @@ onMounted(fetchData)
         <el-button type="primary" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- Shared action dropdown -->
+    <teleport to="body">
+      <div
+        v-if="dropdownVisible && dropdownRow"
+        class="action-dropdown-menu"
+        :style="{ top: dropdownPos.top + 'px', left: dropdownPos.left + 'px' }"
+        @click.stop
+      >
+        <div
+          v-for="act in dropdownRow._secondary"
+          :key="act.label"
+          class="action-dropdown-item"
+          @click="act.handler(); closeDropdown()"
+        >
+          {{ act.label }}
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -260,5 +343,38 @@ onMounted(fetchData)
   margin-bottom: 16px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.action-btns {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.action-btns :deep(.el-button--small) {
+  border-radius: 6px;
+}
+</style>
+
+<style>
+.action-dropdown-menu {
+  position: fixed;
+  z-index: 3000;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  padding: 4px 0;
+  min-width: 100px;
+}
+.action-dropdown-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #303133;
+  transition: background 0.15s;
+}
+.action-dropdown-item:hover {
+  background: #f0f2f5;
 }
 </style>

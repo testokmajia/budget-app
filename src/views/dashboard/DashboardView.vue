@@ -1,18 +1,43 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { getStats } from '@/api/dashboard'
+
+const router = useRouter()
 
 const stats = ref(null)
 const loading = ref(true)
 
 const statusColors = {
   '待分派': '#909399',
-  '已分派': '#e6a23c',
-  '整改中': '#409eff',
+  '待员工处理': '#e6a23c',
+  '待组长审核': '#409eff',
+  '待管理员审核': '#409eff',
   '待确认': '#e6a23c',
   '已完成': '#67c23a',
   '已驳回': '#f56c6c',
   '已关闭': '#909399',
+}
+
+const pendingTaskIcons = {
+  '待分派问题': '📋',
+  '待管理员审核': '🔍',
+  '待处理问题': '🔧',
+  '已驳回问题': '↩️',
+  '待组长审核': '👥',
+  '待确认完成': '✅',
+  '待办清单': '📝',
+}
+
+function navigateTo(routeName, routeQuery) {
+  const query = {}
+  if (routeQuery) {
+    routeQuery.split('&').forEach(p => {
+      const [k, v] = p.split('=')
+      if (k && v) query[k] = v
+    })
+  }
+  router.push({ name: routeName, query })
 }
 
 const totalIssues = computed(() => {
@@ -68,6 +93,26 @@ onMounted(async () => {
     </div>
 
     <template v-if="stats">
+      <!-- Pending tasks -->
+      <div class="pending-tasks-section" v-if="stats.pendingTasks && stats.pendingTasks.length > 0">
+        <div class="pending-tasks-grid">
+          <div
+            class="pending-task-card"
+            v-for="t in stats.pendingTasks"
+            :key="t.title"
+            @click="navigateTo(t.routeName, t.routeQuery)"
+          >
+            <div class="task-icon">{{ pendingTaskIcons[t.title] || '📌' }}</div>
+            <div class="task-body">
+              <div class="task-count">{{ t.count }}</div>
+              <div class="task-label">{{ t.title }}</div>
+              <div class="task-desc">{{ t.description }}</div>
+            </div>
+            <div class="task-arrow">→</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Stat cards -->
       <div class="stat-cards">
         <div class="stat-card total">
@@ -457,6 +502,70 @@ onMounted(async () => {
   color: #c9cdd4;
   padding: 32px 0;
   font-size: 14px;
+}
+
+/* Pending tasks */
+.pending-tasks-section {
+  margin-bottom: 24px;
+}
+.pending-tasks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.pending-task-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f0f5ff 0%, #e8f3ff 100%);
+  border: 1px solid #d6e4ff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.pending-task-card:hover {
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.2);
+  transform: translateY(-2px);
+  border-color: #409eff;
+}
+.task-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.task-body {
+  flex: 1;
+  min-width: 0;
+}
+.task-count {
+  font-size: 24px;
+  font-weight: 700;
+  color: #409eff;
+  line-height: 1.2;
+}
+.task-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d2129;
+  margin-top: 2px;
+}
+.task-desc {
+  font-size: 11px;
+  color: #86909c;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.task-arrow {
+  font-size: 16px;
+  color: #409eff;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.pending-task-card:hover .task-arrow {
+  opacity: 1;
 }
 
 /* Responsive */

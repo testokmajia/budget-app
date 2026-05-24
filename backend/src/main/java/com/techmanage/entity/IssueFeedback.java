@@ -58,6 +58,15 @@ public class IssueFeedback extends BaseEntity {
     @Column(nullable = false, length = 20)
     private String status;
 
+    @Column(name = "previous_status", length = 20)
+    private String previousStatus;
+
+    @Column(name = "last_operator_id")
+    private Long lastOperatorId;
+
+    @Column(name = "`system`", length = 200)
+    private String system;
+
     public String getIssueCode() { return issueCode; }
     public void setIssueCode(String issueCode) { this.issueCode = issueCode; }
     public Long getSubmitterId() { return submitterId; }
@@ -92,4 +101,10 @@ public class IssueFeedback extends BaseEntity {
     public void setPermanentDeadline(LocalDate permanentDeadline) { this.permanentDeadline = permanentDeadline; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getPreviousStatus() { return previousStatus; }
+    public void setPreviousStatus(String previousStatus) { this.previousStatus = previousStatus; }
+    public Long getLastOperatorId() { return lastOperatorId; }
+    public void setLastOperatorId(Long lastOperatorId) { this.lastOperatorId = lastOperatorId; }
+    public String getSystem() { return system; }
+    public void setSystem(String system) { this.system = system; }
 }
