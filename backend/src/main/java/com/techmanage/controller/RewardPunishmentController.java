@@ -5,10 +5,12 @@ import com.techmanage.dto.RewardPunishmentRequest;
 import com.techmanage.dto.RewardPunishmentResponse;
 import com.techmanage.service.RewardPunishmentService;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -22,12 +24,21 @@ public class RewardPunishmentController {
     }
 
     @GetMapping
-    public ApiResponse<List<RewardPunishmentResponse>> list(Authentication auth) {
+    public ApiResponse<List<RewardPunishmentResponse>> list(
+            Authentication auth,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String department,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @RequestParam(required = false) Integer scoreMin,
+            @RequestParam(required = false) Integer scoreMax) {
         Long userId = (Long) auth.getPrincipal();
         boolean canViewAll = auth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")
                 || a.getAuthority().equals("ROLE_CLERK"));
-        return ApiResponse.ok(service.list(userId, canViewAll));
+        return ApiResponse.ok(service.list(userId, canViewAll, type, department,
+            keyword, dateFrom, dateTo, scoreMin, scoreMax));
     }
 
     @GetMapping("/{id}")
@@ -37,8 +48,8 @@ public class RewardPunishmentController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ROLE_CLERK', 'ROLE_ADMIN')")
-    public ApiResponse<RewardPunishmentResponse> create(Authentication auth,
-                                                        @Valid @RequestBody RewardPunishmentRequest request) {
+    public ApiResponse<List<RewardPunishmentResponse>> create(Authentication auth,
+                                                               @Valid @RequestBody RewardPunishmentRequest request) {
         Long userId = (Long) auth.getPrincipal();
         return ApiResponse.ok(service.create(userId, request));
     }

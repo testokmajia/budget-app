@@ -8,7 +8,9 @@ import com.techmanage.repository.UserRepository;
 import com.techmanage.service.RewardPunishmentService;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -24,17 +26,51 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
     }
 
     @Override
-    public List<RewardPunishmentResponse> list(Long userId, boolean canViewAll) {
+    public List<RewardPunishmentResponse> list(Long userId, boolean canViewAll,
+                                                String type, String department,
+                                                String keyword, LocalDate dateFrom,
+                                                LocalDate dateTo, Integer scoreMin, Integer scoreMax) {
+        List<RewardPunishment> source;
         if (canViewAll) {
-            return repository.findAllActive().stream().map(this::toResponse).toList();
+            if (type != null && !type.isEmpty() && department != null && !department.isEmpty()) {
+                source = repository.findByTypeAndDepartment(type, department);
+            } else if (type != null && !type.isEmpty()) {
+                source = repository.findByType(type);
+            } else if (department != null && !department.isEmpty()) {
+                source = repository.findByDepartment(department);
+            } else {
+                source = repository.findAllActive();
+            }
+        } else {
+            String userDept = userRepository.findById(userId)
+                .map(u -> u.getDepartment())
+                .orElse("");
+            if (userDept.isEmpty()) return List.of();
+            if (type != null && !type.isEmpty()) {
+                source = repository.findByTypeAndDepartment(type, userDept);
+            } else {
+                source = repository.findByDepartment(userDept);
+            }
         }
-        String department = userRepository.findById(userId)
-            .map(u -> u.getDepartment())
-            .orElse("");
-        if (department.isEmpty()) {
-            return List.of();
-        }
-        return repository.findByDepartment(department).stream().map(this::toResponse).toList();
+
+        return source.stream()
+            .filter(r -> keyword == null || keyword.isEmpty() || r.getTitle().contains(keyword) || r.getDescription().contains(keyword))
+            .filter(r -> {
+                if (dateFrom == null && dateTo == null) return true;
+                if (dateFrom != null && r.getDecisionDate().isBefore(dateFrom)) return false;
+                if (dateTo != null && r.getDecisionDate().isAfter(dateTo)) return false;
+                return true;
+            })
+            .filter(r -> {
+                if (scoreMin == null && scoreMax == null) return true;
+                Integer s = r.getScore();
+                if (s == null) return false;
+                if (scoreMin != null && s < scoreMin) return false;
+                if (scoreMax != null && s > scoreMax) return false;
+                return true;
+            })
+            .map(this::toResponse)
+            .toList();
     }
 
     @Override
@@ -45,12 +81,19 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
     }
 
     @Override
-    public RewardPunishmentResponse create(Long userId, RewardPunishmentRequest request) {
-        var rp = new RewardPunishment();
-        rp.setCreatorId(userId);
-        applyRequest(rp, request);
-        repository.save(rp);
-        return toResponse(rp);
+    public List<RewardPunishmentResponse> create(Long userId, RewardPunishmentRequest request) {
+        List<RewardPunishmentResponse> results = new ArrayList<>();
+        int baseScore = Math.abs(request.score());
+        for (String name : request.involvedPersonNames()) {
+            if (name == null || name.isBlank()) continue;
+            var rp = new RewardPunishment();
+            rp.setCreatorId(userId);
+            applyRequest(rp, request, baseScore);
+            rp.setInvolvedPerson(name.trim());
+            repository.save(rp);
+            results.add(toResponse(rp));
+        }
+        return results;
     }
 
     @Override
@@ -60,7 +103,12 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
         if (!canEditAll && !rp.getCreatorId().equals(userId)) {
             throw new RuntimeException("只能修改自己创建的记录");
         }
-        applyRequest(rp, request);
+        int baseScore = Math.abs(request.score());
+        applyRequest(rp, request, baseScore);
+        // Update involvedPerson from first name in list if provided
+        if (request.involvedPersonNames() != null && !request.involvedPersonNames().isEmpty()) {
+            rp.setInvolvedPerson(request.involvedPersonNames().get(0).trim());
+        }
         repository.save(rp);
         return toResponse(rp);
     }
@@ -76,15 +124,15 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
         repository.save(rp);
     }
 
-    private void applyRequest(RewardPunishment rp, RewardPunishmentRequest req) {
+    private void applyRequest(RewardPunishment rp, RewardPunishmentRequest req, int baseScore) {
         rp.setType(req.type());
         rp.setTitle(req.title());
         rp.setDescription(req.description());
-        rp.setInvolvedPerson(req.involvedPerson());
         rp.setDepartment(req.department());
         rp.setDecisionDate(req.decisionDate());
         rp.setDocumentNo(req.documentNo());
         rp.setAttachmentUrl(req.attachmentUrl());
+        rp.setScore("惩罚".equals(req.type()) ? -baseScore : baseScore);
     }
 
     private RewardPunishmentResponse toResponse(RewardPunishment rp) {
@@ -95,7 +143,7 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
             rp.getId(), rp.getType(), rp.getTitle(), rp.getDescription(),
             rp.getInvolvedPerson(), rp.getDepartment(), rp.getDecisionDate(),
             rp.getDocumentNo(), rp.getAttachmentUrl(), creatorName,
-            rp.getCreatedAt(), rp.getUpdatedAt()
+            rp.getCreatedAt(), rp.getUpdatedAt(), rp.getScore()
         );
     }
 }

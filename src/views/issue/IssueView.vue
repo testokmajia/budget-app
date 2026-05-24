@@ -105,6 +105,10 @@ const teamSystems = computed(() => {
   if (!assignForm.responsibleTeam) return []
   return systems.value.filter(s => s.team === assignForm.responsibleTeam && s.enabled)
 })
+const editTeamSystems = computed(() => {
+  if (!editForm.responsibleTeam) return []
+  return systems.value.filter(s => s.team === editForm.responsibleTeam && s.enabled)
+})
 watch(() => assignForm.system, (sysName) => {
   if (!sysName) return
   const sys = systems.value.find(s => s.name === sysName)
@@ -164,6 +168,7 @@ const editForm = reactive({
   permanentDeadline: '',
   status: '',
   system: '',
+  submitterId: null,
 })
 const editRules = {
   title: [{ required: true, message: '请输入问题标题', trigger: 'blur' }],
@@ -608,6 +613,7 @@ function handleEdit(row) {
   editForm.permanentDeadline = row.permanentDeadline || ''
   editForm.status = row.status || ''
   editForm.system = row.system || ''
+  editForm.submitterId = row.submitterId || null
   editVisible.value = true
 }
 async function handleEditSubmit() {
@@ -747,7 +753,6 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2>科技问题管理</h2>
       <div style="display: flex; gap: 8px">
         <el-button :icon="Download" @click="handleExport">导出</el-button>
         <el-button type="primary" :icon="Plus" @click="handleCreate">提交问题</el-button>
@@ -1012,6 +1017,15 @@ onUnmounted(() => {
             </el-form-item>
           </el-col>
           <el-col :span="12">
+            <el-form-item label="提出人">
+              <el-select v-model="editForm.submitterId" style="width: 100%" clearable filterable>
+                <el-option v-for="u in allUsers" :key="u.id" :label="`${u.name} (${u.department || '-'})`" :value="u.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
             <el-form-item label="提出场合">
               <el-select v-model="editForm.occasionId" style="width: 100%" clearable>
                 <el-option-group label="会议">
@@ -1020,6 +1034,13 @@ onUnmounted(() => {
                 <el-option-group label="通用">
                   <el-option v-for="o in occasions.filter(x => x.type === 'GENERAL' && x.enabled)" :key="o.id" :label="o.name" :value="o.id" />
                 </el-option-group>
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="问题类型">
+              <el-select v-model="editForm.issueType" style="width: 100%" clearable>
+                <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.name" :disabled="!c.enabled" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -1038,15 +1059,8 @@ onUnmounted(() => {
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="问题类型">
-              <el-select v-model="editForm.issueType" style="width: 100%" clearable>
-                <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.name" :disabled="!c.enabled" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
             <el-form-item label="责任团队">
-              <el-select v-model="editForm.responsibleTeam" style="width: 100%" clearable>
+              <el-select v-model="editForm.responsibleTeam" style="width: 100%" clearable @change="editForm.system = ''">
                 <el-option v-for="t in teams" :key="t.id" :label="t.name" :value="t.name" :disabled="!t.enabled" />
               </el-select>
             </el-form-item>
@@ -1064,7 +1078,9 @@ onUnmounted(() => {
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="涉及系统">
-              <el-input v-model="editForm.system" placeholder="涉及系统" />
+              <el-select v-model="editForm.system" style="width: 100%" placeholder="请选择涉及系统" clearable filterable :disabled="!editForm.responsibleTeam">
+                <el-option v-for="s in editTeamSystems" :key="s.id" :label="s.name" :value="s.name" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">

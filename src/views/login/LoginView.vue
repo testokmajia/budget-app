@@ -138,7 +138,6 @@ onUnmounted(() => {
                 登 录
               </el-button>
             </el-form-item>
-            <p class="hint">默认管理员：admin / admin123456</p>
           </el-form>
         </el-tab-pane>
 

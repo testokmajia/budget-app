@@ -1,7 +1,8 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { getStats } from '@/api/dashboard'
 import {
   HomeFilled,
   List,
@@ -16,6 +17,36 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const drawerVisible = ref(false)
+const pendingTasks = ref([])
+
+const pageTitle = computed(() => {
+  const map = {
+    '/dashboard': '首页',
+    '/checklist': '清单管理',
+    '/reward': '奖惩记录',
+    '/issue': '科技问题管理',
+    '/admin': '系统管理',
+  }
+  return map[route.path] || ''
+})
+
+function parseQuery(raw) {
+  const query = {}
+  if (raw) {
+    raw.split('&').forEach(p => {
+      const [k, v] = p.split('=')
+      if (k && v) query[k] = v
+    })
+  }
+  return query
+}
+
+async function fetchPendingTasks() {
+  try {
+    const res = await getStats()
+    pendingTasks.value = res.data?.pendingTasks || []
+  } catch { pendingTasks.value = [] }
+}
 
 // Resizable sidebar
 const STORAGE_KEY = 'sidebar_width'
@@ -58,6 +89,10 @@ function onResizeEnd() {
   document.removeEventListener('mouseup', onResizeEnd)
   try { localStorage.setItem(STORAGE_KEY, String(sidebarWidth.value)) } catch { /* ignore */ }
 }
+
+onMounted(() => {
+  fetchPendingTasks()
+})
 
 onUnmounted(() => {
   document.removeEventListener('mousemove', onResizeMove)
@@ -159,8 +194,17 @@ function handleLogout() {
         <div class="header-left">
           <el-button class="menu-toggle" :icon="Menu" @click="drawerVisible = true" />
           <span class="mobile-logo">科技管理平台</span>
+          <span class="page-title">{{ pageTitle }}</span>
         </div>
         <div class="header-right">
+          <span
+            v-for="t in pendingTasks"
+            :key="t.title"
+            class="header-badge"
+            @click="router.push({ name: t.routeName, query: parseQuery(t.routeQuery) })"
+          >
+            {{ t.title }} <strong>{{ t.count }}</strong>
+          </span>
           <span class="user-info">
             {{ userStore.user?.name }}
             <span class="roles">({{ userStore.user?.roles?.join('、') }})</span>
@@ -235,6 +279,30 @@ function handleLogout() {
   font-size: 16px;
   font-weight: 600;
   color: #303133;
+}
+.page-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+.header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: #ecf5ff;
+  color: #409eff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.header-badge:hover {
+  background: #d9ecff;
+}
+.header-badge strong {
+  font-size: 13px;
 }
 .user-info {
   font-size: 14px;

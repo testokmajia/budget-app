@@ -1,10 +1,8 @@
 package com.techmanage.config;
 
-import com.techmanage.entity.IssueCategory;
 import com.techmanage.entity.IssueOccasion;
 import com.techmanage.entity.Role;
 import com.techmanage.entity.User;
-import com.techmanage.repository.IssueCategoryRepository;
 import com.techmanage.repository.IssueOccasionRepository;
 import com.techmanage.repository.RoleRepository;
 import com.techmanage.repository.UserRepository;
@@ -23,18 +21,15 @@ public class DataInitializer implements CommandLineRunner {
 
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
-    private final IssueCategoryRepository categoryRepository;
     private final IssueOccasionRepository occasionRepository;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(RoleRepository roleRepository,
                           UserRepository userRepository,
-                          IssueCategoryRepository categoryRepository,
                           IssueOccasionRepository occasionRepository,
                           PasswordEncoder passwordEncoder) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
-        this.categoryRepository = categoryRepository;
         this.occasionRepository = occasionRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -43,7 +38,6 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) {
         initRoles();
         initAdminUser();
-        initCategories();
         initOccasions();
     }
 
@@ -72,21 +66,7 @@ public class DataInitializer implements CommandLineRunner {
             admin.setDepartment("信息科技部");
             admin.setRoles(Set.of(adminRole));
             userRepository.save(admin);
-            log.info("管理员账号已初始化: admin / admin123456");
-        }
-    }
-
-    private void initCategories() {
-        String[] names = {"硬件", "软件", "网络", "安全", "数据", "其他"};
-        for (int i = 0; i < names.length; i++) {
-            if (!categoryRepository.existsByName(names[i])) {
-                var cat = new IssueCategory();
-                cat.setName(names[i]);
-                cat.setSortOrder(i);
-                cat.setEnabled(true);
-                categoryRepository.save(cat);
-                log.info("问题分类已初始化: {}", names[i]);
-            }
+            log.info("管理员账号已初始化");
         }
     }
 

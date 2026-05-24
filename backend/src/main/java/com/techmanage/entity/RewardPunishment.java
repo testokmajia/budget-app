@@ -35,6 +35,8 @@ public class RewardPunishment extends BaseEntity {
     @Column(nullable = false)
     private Long creatorId;
 
+    private Integer score;
+
     private LocalDateTime deletedAt;
 
     public String getType() { return type; }
@@ -55,6 +57,8 @@ public class RewardPunishment extends BaseEntity {
     public void setAttachmentUrl(String attachmentUrl) { this.attachmentUrl = attachmentUrl; }
     public Long getCreatorId() { return creatorId; }
     public void setCreatorId(Long creatorId) { this.creatorId = creatorId; }
+    public Integer getScore() { return score; }
+    public void setScore(Integer score) { this.score = score; }
     public LocalDateTime getDeletedAt() { return deletedAt; }
     public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
 }

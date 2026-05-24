@@ -324,6 +324,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
         if (request.permanentDeadline() != null) issue.setPermanentDeadline(request.permanentDeadline());
         if (request.status() != null) issue.setStatus(request.status());
         if (request.system() != null) issue.setSystem(request.system());
+        if (request.submitterId() != null) issue.setSubmitterId(request.submitterId());
         issueRepository.save(issue);
         addLog(issue.getId(), userId, "管理员编辑", "修改了问题信息");
         return toResponse(issue);

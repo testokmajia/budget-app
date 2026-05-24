@@ -18,5 +18,6 @@ public record IssueUpdateRequest(
     String permanentSolution,
     LocalDate permanentDeadline,
     String status,
-    String system
+    String system,
+    Long submitterId
 ) {}

@@ -16,7 +16,11 @@ const canEdit = computed(() => userStore.hasRole('ROLE_CLERK') || userStore.hasR
 
 const searchForm = reactive({
   type: '',
+  department: '',
+  keyword: '',
   dateRange: [],
+  scoreMin: null,
+  scoreMax: null,
 })
 
 const dialogVisible = ref(false)
@@ -25,35 +29,42 @@ const editId = ref(null)
 const uploading = ref(false)
 const form = reactive({
   type: '奖励',
+  involvedPersonNames: [],
   title: '',
   description: '',
-  involvedPersonNames: [],
   department: userStore.user?.department || '',
   decisionDate: '',
+  score: null,
   attachmentUrl: '',
 })
 const rules = {
   type: [{ required: true, message: '请选择类型', trigger: 'change' }],
+  involvedPersonNames: [{ type: 'array', required: true, message: '请选择涉及人员', trigger: 'change' }],
   title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
   description: [{ required: true, message: '请输入内容描述', trigger: 'blur' }],
   department: [{ required: true, message: '请选择部门', trigger: 'change' }],
   decisionDate: [{ required: true, message: '请选择日期', trigger: 'change' }],
+  score: [{ required: true, message: '请输入分值', trigger: 'blur' }],
 }
 
-const selectedInvolvedNames = computed(() => {
-  return form.involvedPersonNames.join(', ')
-})
+const scoreLabel = computed(() => form.type === '奖励' ? '奖励分值' : '惩罚分值')
+const scorePlaceholder = computed(() => form.type === '惩罚' ? '自动转为负数' : '')
 
 async function fetchData() {
   loading.value = true
   try {
-    const res = await getList({ type: searchForm.type || undefined })
-    let data = res.data || []
+    const params = {}
+    if (searchForm.type) params.type = searchForm.type
+    if (searchForm.department) params.department = searchForm.department
+    if (searchForm.keyword) params.keyword = searchForm.keyword
     if (searchForm.dateRange?.length === 2) {
-      const [start, end] = searchForm.dateRange
-      data = data.filter(r => r.decisionDate >= start && r.decisionDate <= end)
+      params.dateFrom = searchForm.dateRange[0]
+      params.dateTo = searchForm.dateRange[1]
     }
-    tableData.value = data
+    if (searchForm.scoreMin != null) params.scoreMin = searchForm.scoreMin
+    if (searchForm.scoreMax != null) params.scoreMax = searchForm.scoreMax
+    const res = await getList(params)
+    tableData.value = res.data || []
   } finally {
     loading.value = false
   }
@@ -64,11 +75,12 @@ function handleAdd() {
   editId.value = null
   Object.assign(form, {
     type: '奖励',
+    involvedPersonNames: [],
     title: '',
     description: '',
-    involvedPersonNames: [],
     department: userStore.user?.department || '',
     decisionDate: '',
+    score: null,
     attachmentUrl: '',
   })
   dialogVisible.value = true
@@ -77,14 +89,14 @@ function handleAdd() {
 function handleEdit(row) {
   isEdit.value = true
   editId.value = row.id
-  const names = row.involvedPerson ? row.involvedPerson.split(',').map(s => s.trim()).filter(Boolean) : []
   Object.assign(form, {
     type: row.type,
+    involvedPersonNames: row.involvedPerson ? [row.involvedPerson] : [],
     title: row.title,
     description: row.description,
-    involvedPersonNames: names,
     department: row.department,
     decisionDate: row.decisionDate,
+    score: row.score != null ? Math.abs(row.score) : null,
     attachmentUrl: row.attachmentUrl || '',
   })
   dialogVisible.value = true
@@ -119,18 +131,18 @@ async function handleSubmit() {
     ElMessage.warning('请选择涉及人员')
     return
   }
-  const data = {
-    ...form,
-    involvedPerson: form.involvedPersonNames.join(','),
-    decisionDate: form.decisionDate || null,
+  if (form.score == null || form.score === '') {
+    ElMessage.warning('请输入分值')
+    return
   }
-  delete data.involvedPersonNames
+  const data = { ...form, decisionDate: form.decisionDate || null, score: Number(form.score) }
   if (isEdit.value) {
+    data.involvedPersonNames = [form.involvedPersonNames[0] || form.involvedPersonNames]
     await update(editId.value, data)
     ElMessage.success('已更新')
   } else {
     await create(data)
-    ElMessage.success('已创建')
+    ElMessage.success(`已创建 ${data.involvedPersonNames.length} 条记录`)
   }
   dialogVisible.value = false
   fetchData()
@@ -138,6 +150,16 @@ async function handleSubmit() {
 
 function getTypeTag(type) {
   return type === '奖励' ? 'success' : 'danger'
+}
+
+function scoreColor(score) {
+  if (score == null) return ''
+  return score > 0 ? '#67c23a' : score < 0 ? '#f56c6c' : '#909399'
+}
+
+function formatScore(score) {
+  if (score == null) return '-'
+  return score > 0 ? `+${score}` : `${score}`
 }
 
 async function loadDepartments() {
@@ -164,15 +186,18 @@ onMounted(() => {
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2>奖惩记录</h2>
       <el-button v-if="canEdit" type="primary" :icon="Plus" @click="handleAdd">新增记录</el-button>
     </div>
 
     <div class="search-bar">
-      <el-select v-model="searchForm.type" placeholder="类型" clearable style="width: 120px" @change="fetchData">
+      <el-select v-model="searchForm.type" placeholder="类型" clearable style="width: 100px" @change="fetchData">
         <el-option label="奖励" value="奖励" />
         <el-option label="惩罚" value="惩罚" />
       </el-select>
+      <el-select v-model="searchForm.department" placeholder="部门" clearable style="width: 140px" @change="fetchData">
+        <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.name" />
+      </el-select>
+      <el-input v-model="searchForm.keyword" placeholder="搜索标题/内容" clearable style="width: 180px" @input="fetchData" />
       <el-date-picker
         v-model="searchForm.dateRange"
         type="daterange"
@@ -180,38 +205,62 @@ onMounted(() => {
         start-placeholder="开始日期"
         end-placeholder="结束日期"
         value-format="YYYY-MM-DD"
-        style="width: 260px"
+        style="width: 240px"
         @change="fetchData"
       />
+      <el-input-number v-model="searchForm.scoreMin" placeholder="分值最低" style="width: 130px" controls-position="right" @change="fetchData" />
+      <span style="color: #909399">-</span>
+      <el-input-number v-model="searchForm.scoreMax" placeholder="分值最高" style="width: 130px" controls-position="right" @change="fetchData" />
+      <el-button @click="Object.assign(searchForm, { type: '', department: '', keyword: '', dateRange: [], scoreMin: null, scoreMax: null }); fetchData()">重置</el-button>
     </div>
 
     <el-table :data="tableData" v-loading="loading" stripe border>
+      <el-table-column prop="involvedPerson" label="涉及人员" width="100" />
       <el-table-column prop="type" label="类型" width="80">
         <template #default="{ row }">
           <el-tag :type="getTypeTag(row.type)">{{ row.type }}</el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="分值" width="80" align="center">
+        <template #default="{ row }">
+          <span :style="{ color: scoreColor(row.score), fontWeight: '600' }">{{ formatScore(row.score) }}</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="involvedPerson" label="涉及人员" width="140" />
-      <el-table-column prop="department" label="部门" width="140" />
+      <el-table-column prop="department" label="部门" width="120" />
       <el-table-column prop="decisionDate" label="决定日期" width="110" />
-      <el-table-column label="附件" width="80">
+      <el-table-column label="附件" width="70">
         <template #default="{ row }">
           <a v-if="row.attachmentUrl" :href="row.attachmentUrl" target="_blank">查看</a>
           <span v-else style="color: #c0c4cc">-</span>
         </template>
       </el-table-column>
       <el-table-column prop="creatorName" label="录入人" width="90" />
-      <el-table-column v-if="canEdit" label="操作" width="140" fixed="right">
+      <el-table-column v-if="canEdit" label="操作" width="150" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link :icon="Edit" @click="handleEdit(row)">编辑</el-button>
-          <el-button type="danger" link :icon="Delete" @click="handleDelete(row)">删除</el-button>
+          <div class="action-btns">
+            <el-button type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="danger" size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑记录' : '新增记录'" width="580px">
       <el-form :model="form" :rules="rules" label-width="80px">
+        <el-form-item label="涉及人员" prop="involvedPersonNames" required>
+          <el-select
+            v-model="form.involvedPersonNames"
+            style="width: 100%"
+            :multiple="!isEdit"
+            filterable
+            placeholder="请选择涉及人员"
+            collapse-tags
+            collapse-tags-tooltip
+          >
+            <el-option v-for="u in allUsers" :key="u.id" :label="u.name" :value="u.name" />
+          </el-select>
+        </el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="类型" prop="type">
@@ -222,8 +271,8 @@ onMounted(() => {
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="决定日期" prop="decisionDate">
-              <el-date-picker v-model="form.decisionDate" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+            <el-form-item :label="scoreLabel" prop="score">
+              <el-input-number v-model="form.score" :min="0" style="width: 100%" :placeholder="scorePlaceholder" controls-position="right" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -235,25 +284,15 @@ onMounted(() => {
         </el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="涉及人员" required>
-              <el-select
-                v-model="form.involvedPersonNames"
-                style="width: 100%"
-                multiple
-                filterable
-                placeholder="请选择涉及人员"
-                collapse-tags
-                collapse-tags-tooltip
-              >
-                <el-option v-for="u in allUsers" :key="u.id" :label="u.name" :value="u.name" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
             <el-form-item label="部门" prop="department">
               <el-select v-model="form.department" style="width: 100%" clearable filterable placeholder="请选择部门">
                 <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.name" :disabled="!d.enabled" />
               </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="决定日期" prop="decisionDate">
+              <el-date-picker v-model="form.decisionDate" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -282,6 +321,12 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.action-btns {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  align-items: center;
+}
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -295,6 +340,7 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
   align-items: center;
 }
 

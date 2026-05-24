@@ -15,5 +15,6 @@ public record RewardPunishmentResponse(
     String attachmentUrl,
     String creatorName,
     LocalDateTime createdAt,
-    LocalDateTime updatedAt
+    LocalDateTime updatedAt,
+    Integer score
 ) {}

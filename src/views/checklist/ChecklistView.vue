@@ -219,7 +219,6 @@ onUnmounted(() => {
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2>清单管理</h2>
       <el-button type="primary" :icon="Plus" @click="handleAdd">新建清单</el-button>
     </div>
 

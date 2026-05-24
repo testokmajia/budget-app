@@ -399,7 +399,6 @@ onMounted(() => {
 
 <template>
   <div class="page-container">
-    <div class="page-header"><h2>系统管理</h2></div>
 
     <el-tabs v-model="activeTab">
       <!-- 用户管理 -->

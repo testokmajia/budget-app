@@ -13,4 +13,12 @@ public interface RewardPunishmentRepository extends JpaRepository<RewardPunishme
 
     @Query("SELECT r FROM RewardPunishment r WHERE r.deletedAt IS NULL ORDER BY r.decisionDate DESC")
     List<RewardPunishment> findAllActive();
+
+    @Query("SELECT r FROM RewardPunishment r WHERE r.type = ?1 AND r.deletedAt IS NULL ORDER BY r.decisionDate DESC")
+    List<RewardPunishment> findByType(String type);
+
+    @Query("SELECT r FROM RewardPunishment r WHERE r.type = ?1 AND r.department = ?2 AND r.deletedAt IS NULL ORDER BY r.decisionDate DESC")
+    List<RewardPunishment> findByTypeAndDepartment(String type, String department);
+
+    List<RewardPunishment> findByInvolvedPerson(String involvedPerson);
 }

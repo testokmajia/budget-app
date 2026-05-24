@@ -1,9 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { getStats } from '@/api/dashboard'
-
-const router = useRouter()
 
 const stats = ref(null)
 const loading = ref(true)
@@ -17,27 +14,6 @@ const statusColors = {
   '已完成': '#67c23a',
   '已驳回': '#f56c6c',
   '已关闭': '#909399',
-}
-
-const pendingTaskIcons = {
-  '待分派问题': '📋',
-  '待管理员审核': '🔍',
-  '待处理问题': '🔧',
-  '已驳回问题': '↩️',
-  '待组长审核': '👥',
-  '待确认完成': '✅',
-  '待办清单': '📝',
-}
-
-function navigateTo(routeName, routeQuery) {
-  const query = {}
-  if (routeQuery) {
-    routeQuery.split('&').forEach(p => {
-      const [k, v] = p.split('=')
-      if (k && v) query[k] = v
-    })
-  }
-  router.push({ name: routeName, query })
 }
 
 const totalIssues = computed(() => {
@@ -87,32 +63,7 @@ onMounted(async () => {
 
 <template>
   <div class="page-container" v-loading="loading">
-    <div class="page-header">
-      <h2>首页</h2>
-      <span class="subtitle">企业科技管理数据概览</span>
-    </div>
-
     <template v-if="stats">
-      <!-- Pending tasks -->
-      <div class="pending-tasks-section" v-if="stats.pendingTasks && stats.pendingTasks.length > 0">
-        <div class="pending-tasks-grid">
-          <div
-            class="pending-task-card"
-            v-for="t in stats.pendingTasks"
-            :key="t.title"
-            @click="navigateTo(t.routeName, t.routeQuery)"
-          >
-            <div class="task-icon">{{ pendingTaskIcons[t.title] || '📌' }}</div>
-            <div class="task-body">
-              <div class="task-count">{{ t.count }}</div>
-              <div class="task-label">{{ t.title }}</div>
-              <div class="task-desc">{{ t.description }}</div>
-            </div>
-            <div class="task-arrow">→</div>
-          </div>
-        </div>
-      </div>
-
       <!-- Stat cards -->
       <div class="stat-cards">
         <div class="stat-card total">
@@ -256,28 +207,42 @@ onMounted(async () => {
           </div>
         </el-col>
       </el-row>
+
+      <!-- Reward ranking -->
+      <el-row :gutter="20" class="charts-row" v-if="stats.rewardRanking && stats.rewardRanking.length > 0">
+        <el-col :span="24">
+          <div class="chart-card">
+            <h3 class="chart-title">人员奖惩排名 <span style="font-weight:400;font-size:13px;color:#86909c">(分值合计)</span></h3>
+            <div class="ranking-grid">
+              <div
+                v-for="(r, idx) in stats.rewardRanking"
+                :key="r.personName"
+                class="ranking-item"
+                :class="{ 'top-1': idx === 0, 'top-2': idx === 1, 'top-3': idx === 2 }"
+              >
+                <div class="ranking-pos">
+                  <span v-if="idx === 0" class="medal">🥇</span>
+                  <span v-else-if="idx === 1" class="medal">🥈</span>
+                  <span v-else-if="idx === 2" class="medal">🥉</span>
+                  <span v-else class="pos-num">{{ idx + 1 }}</span>
+                </div>
+                <div class="ranking-info">
+                  <div class="ranking-name">{{ r.personName }}</div>
+                  <div class="ranking-dept">{{ r.department }}</div>
+                </div>
+                <div class="ranking-score" :class="{ positive: r.totalScore > 0, negative: r.totalScore < 0 }">
+                  {{ r.totalScore > 0 ? '+' : '' }}{{ r.totalScore }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </el-col>
+      </el-row>
     </template>
   </div>
 </template>
 
 <style scoped>
-.page-header {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-.page-header h2 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  color: #1d2129;
-}
-.subtitle {
-  font-size: 13px;
-  color: #86909c;
-}
-
 /* Stat cards */
 .stat-cards {
   display: grid;
@@ -504,72 +469,81 @@ onMounted(async () => {
   font-size: 14px;
 }
 
-/* Pending tasks */
-.pending-tasks-section {
-  margin-bottom: 24px;
-}
-.pending-tasks-grid {
+/* Ranking */
+.ranking-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
 }
-.pending-task-card {
+.ranking-item {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px 20px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #f0f5ff 0%, #e8f3ff 100%);
-  border: 1px solid #d6e4ff;
-  cursor: pointer;
-  transition: all 0.2s;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #f7f8fa;
+  border-radius: 8px;
+  transition: all 0.15s;
 }
-.pending-task-card:hover {
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.2);
-  transform: translateY(-2px);
-  border-color: #409eff;
+.ranking-item:hover {
+  background: #e8f3ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
-.task-icon {
-  font-size: 28px;
+.ranking-item.top-1 {
+  background: linear-gradient(135deg, #fff9e6 0%, #fff3cc 100%);
+  border: 1px solid #f0d060;
+}
+.ranking-item.top-2 {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+  border: 1px solid #c0c4cc;
+}
+.ranking-item.top-3 {
+  background: linear-gradient(135deg, #fdf2ec 0%, #f9e0cc 100%);
+  border: 1px solid #e0b080;
+}
+.ranking-pos {
+  width: 28px;
+  text-align: center;
   flex-shrink: 0;
 }
-.task-body {
+.medal {
+  font-size: 20px;
+}
+.pos-num {
+  font-size: 13px;
+  font-weight: 600;
+  color: #909399;
+}
+.ranking-info {
   flex: 1;
   min-width: 0;
 }
-.task-count {
-  font-size: 24px;
-  font-weight: 700;
-  color: #409eff;
-  line-height: 1.2;
-}
-.task-label {
-  font-size: 13px;
+.ranking-name {
+  font-size: 14px;
   font-weight: 600;
   color: #1d2129;
-  margin-top: 2px;
-}
-.task-desc {
-  font-size: 11px;
-  color: #86909c;
-  margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.task-arrow {
+.ranking-dept {
+  font-size: 11px;
+  color: #86909c;
+  margin-top: 1px;
+}
+.ranking-score {
   font-size: 16px;
-  color: #409eff;
+  font-weight: 700;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.2s;
 }
-.pending-task-card:hover .task-arrow {
-  opacity: 1;
-}
+.ranking-score.positive { color: #67c23a; }
+.ranking-score.negative { color: #f56c6c; }
 
 /* Responsive */
 @media (max-width: 768px) {
+  .ranking-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
   .stat-cards {
     grid-template-columns: repeat(2, 1fr);
   }

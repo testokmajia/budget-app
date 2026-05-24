@@ -4,10 +4,12 @@ import com.techmanage.common.ApiResponse;
 import com.techmanage.dto.DashboardStats;
 import com.techmanage.entity.Checklist;
 import com.techmanage.entity.IssueFeedback;
+import com.techmanage.entity.RewardPunishment;
 import com.techmanage.entity.Team;
 import com.techmanage.entity.User;
 import com.techmanage.repository.ChecklistRepository;
 import com.techmanage.repository.IssueFeedbackRepository;
+import com.techmanage.repository.RewardPunishmentRepository;
 import com.techmanage.repository.TeamRepository;
 import com.techmanage.repository.UserRepository;
 import org.springframework.security.core.Authentication;
@@ -35,15 +37,18 @@ public class DashboardController {
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final ChecklistRepository checklistRepository;
+    private final RewardPunishmentRepository rewardRepository;
 
     public DashboardController(IssueFeedbackRepository issueRepository,
                                TeamRepository teamRepository,
                                UserRepository userRepository,
-                               ChecklistRepository checklistRepository) {
+                               ChecklistRepository checklistRepository,
+                               RewardPunishmentRepository rewardRepository) {
         this.issueRepository = issueRepository;
         this.teamRepository = teamRepository;
         this.userRepository = userRepository;
         this.checklistRepository = checklistRepository;
+        this.rewardRepository = rewardRepository;
     }
 
     @GetMapping("/stats")
@@ -198,11 +203,28 @@ public class DashboardController {
             ));
         }
 
+        // Reward/punishment ranking (top 10 by total score)
+        List<RewardPunishment> allRewards = rewardRepository.findAllActive();
+        Map<String, Integer> scoreSum = allRewards.stream()
+            .collect(Collectors.groupingBy(RewardPunishment::getInvolvedPerson,
+                Collectors.summingInt(r -> r.getScore() != null ? r.getScore() : 0)));
+        Map<String, String> personDept = allRewards.stream()
+            .collect(Collectors.toMap(RewardPunishment::getInvolvedPerson,
+                r -> r.getDepartment() != null ? r.getDepartment() : "",
+                (d1, d2) -> d1));
+        List<DashboardStats.RewardRanking> rewardRanking = scoreSum.entrySet().stream()
+            .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+            .limit(10)
+            .map(e -> new DashboardStats.RewardRanking(e.getKey(),
+                personDept.getOrDefault(e.getKey(), ""), e.getValue()))
+            .toList();
+
         return ApiResponse.ok(new DashboardStats(
             statusCounts, teamDistribution,
             new DashboardStats.OverdueInfo(tempOverdue, permOverdue),
             personnel,
-            pendingTasks
+            pendingTasks,
+            rewardRanking
         ));
     }
 }
