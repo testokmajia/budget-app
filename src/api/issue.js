@@ -53,3 +53,32 @@ export function reviewProposal(id, data) {
 export function getIssueProposals(id) {
   return request.get(`/issues/${id}/change-proposals`)
 }
+
+// Attachments
+export function uploadAttachments(id, files) {
+  const formData = new FormData()
+  files.forEach(f => formData.append('files', f))
+  return request.post(`/issues/${id}/attachments`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+export function getAttachments(id) {
+  return request.get(`/issues/${id}/attachments`)
+}
+export function deleteAttachment(issueId, attId) {
+  return request.delete(`/issues/${issueId}/attachments/${attId}`)
+}
+
+// Pending issues & system assignments
+export function getPendingIssues(params) {
+  return request.get('/issues/pending', { params })
+}
+export function completeAssignment(issueId, assignmentId, data) {
+  return request.put(`/issues/${issueId}/systems/${assignmentId}/complete`, data)
+}
+export function getSystemAssignments(issueId) {
+  return request.get(`/issues/${issueId}/systems`)
+}
+export function feedbackToSubmitter(id) {
+  return request.put(`/issues/${id}/feedback`)
+}

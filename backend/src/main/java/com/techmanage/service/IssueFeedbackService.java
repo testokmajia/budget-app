@@ -1,12 +1,14 @@
 package com.techmanage.service;
 
 import com.techmanage.dto.*;
+import com.techmanage.entity.IssueSystemAssignment;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 public interface IssueFeedbackService {
     PageResponse<IssueResponse> list(int page, int size, String sortBy, String sortDir,
-        List<String> statuses, List<Long> submitterIds, String submitterDepartment,
+        List<String> statuses, List<Long> submitterIds, List<String> submitterDepartments,
         Long occasionId, String issueType, String responsibleTeam,
         Long responsiblePersonId, LocalDate dateFrom, LocalDate dateTo,
         Long currentUserId, boolean isAdmin, boolean isIssueAdmin,
@@ -24,7 +26,7 @@ public interface IssueFeedbackService {
     // 团队负责人审核: 待组长审核 → 待管理员审核 (通过) or 待员工处理 (退回)
     IssueResponse reviewByLeader(Long id, Long userId, IssueReviewRequest request);
 
-    // 管理员审核: 待管理员审核 → 待确认 (通过) or 待员工处理 (退回)
+    // 管理员审核: 待管理员审核 → 解决中/待确认 (通过) or 待员工处理 (退回)
     IssueResponse reviewByAdmin(Long id, Long userId, IssueReviewRequest request);
 
     // 提出人确认: 待确认 → 已完成 (确认) or 待员工处理 (退回)
@@ -34,4 +36,17 @@ public interface IssueFeedbackService {
     IssueResponse close(Long id, Long userId, IssueCloseRequest request);
     IssueResponse update(Long id, Long userId, IssueUpdateRequest request);
     IssueResponse undo(Long id, Long userId);
+
+    // 系统负责人标记完成
+    void completeSystemAssignment(Long assignmentId, Long userId, String completionNote);
+
+    // 管理员反馈给提出人
+    IssueResponse feedbackToSubmitter(Long issueId, Long userId);
+
+    // 获取问题系统分配列表
+    List<IssueSystemAssignment> getSystemAssignments(Long issueId);
+
+    // 获取待处理分配列表（每个系统分配独立一行），支持筛选
+    List<Map<String, Object>> listPending(Long currentUserId, boolean isAdmin, boolean isIssueAdmin,
+                                          String status, Long ownerId);
 }

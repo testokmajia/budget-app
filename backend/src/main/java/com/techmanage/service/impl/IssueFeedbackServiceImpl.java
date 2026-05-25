@@ -5,9 +5,14 @@ import com.techmanage.entity.IssueFeedback;
 import com.techmanage.entity.IssueLog;
 import com.techmanage.entity.IssueOccasion;
 import com.techmanage.entity.User;
+import com.techmanage.entity.IssueSystemAssignment;
+import com.techmanage.entity.SystemInfo;
+import com.techmanage.repository.AttachmentRepository;
 import com.techmanage.repository.IssueFeedbackRepository;
 import com.techmanage.repository.IssueLogRepository;
 import com.techmanage.repository.IssueOccasionRepository;
+import com.techmanage.repository.IssueSystemAssignmentRepository;
+import com.techmanage.repository.SystemInfoRepository;
 import com.techmanage.repository.TeamRepository;
 import com.techmanage.repository.UserRepository;
 import com.techmanage.service.IssueFeedbackService;
@@ -33,22 +38,31 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     private final UserRepository userRepository;
     private final IssueOccasionRepository occasionRepository;
     private final TeamRepository teamRepository;
+    private final AttachmentRepository attachmentRepository;
+    private final IssueSystemAssignmentRepository systemAssignmentRepository;
+    private final SystemInfoRepository systemInfoRepository;
 
     public IssueFeedbackServiceImpl(IssueFeedbackRepository issueRepository,
                                      IssueLogRepository logRepository,
                                      UserRepository userRepository,
                                      IssueOccasionRepository occasionRepository,
-                                     TeamRepository teamRepository) {
+                                     TeamRepository teamRepository,
+                                     AttachmentRepository attachmentRepository,
+                                     IssueSystemAssignmentRepository systemAssignmentRepository,
+                                     SystemInfoRepository systemInfoRepository) {
         this.issueRepository = issueRepository;
         this.logRepository = logRepository;
         this.userRepository = userRepository;
         this.occasionRepository = occasionRepository;
         this.teamRepository = teamRepository;
+        this.attachmentRepository = attachmentRepository;
+        this.systemAssignmentRepository = systemAssignmentRepository;
+        this.systemInfoRepository = systemInfoRepository;
     }
 
     @Override
     public PageResponse<IssueResponse> list(int page, int size, String sortBy, String sortDir,
-            List<String> statuses, List<Long> submitterIds, String submitterDepartment,
+            List<String> statuses, List<Long> submitterIds, List<String> submitterDepartments,
             Long occasionId, String issueType, String responsibleTeam,
             Long responsiblePersonId, LocalDate dateFrom, LocalDate dateTo,
             Long currentUserId, boolean isAdmin, boolean isIssueAdmin,
@@ -81,8 +95,8 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
             if (submitterIds != null && !submitterIds.isEmpty()) {
                 predicates.add(root.get("submitterId").in(submitterIds));
             }
-            if (submitterDepartment != null && !submitterDepartment.isBlank()) {
-                predicates.add(cb.equal(root.get("submitterDepartment"), submitterDepartment));
+            if (submitterDepartments != null && !submitterDepartments.isEmpty()) {
+                predicates.add(root.get("submitterDepartment").in(submitterDepartments));
             }
             if (occasionId != null) {
                 predicates.add(cb.equal(root.get("occasionId"), occasionId));
@@ -140,7 +154,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     public IssueResponse create(Long userId, IssueRequest request) {
         var issue = new IssueFeedback();
         issue.setIssueCode(generateIssueCode());
-        issue.setSubmitterId(userId);
+        issue.setSubmitterId(request.submitterId());
         issue.setTitle(request.title());
         issue.setDescription(request.description());
         issue.setSubmitterDepartment(request.submitterDepartment());
@@ -180,13 +194,29 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
                     .map(u -> u.getName()).orElse("");
         }
         issue.setResponsiblePersonId(responsiblePersonId);
-        issue.setSystem(request.system());
+
+        // 支持多系统: 存储为逗号分隔
+        List<String> systems = request.systems() != null ? request.systems() : List.of();
+        String systemStr = systems.isEmpty() ? null : String.join(",", systems);
+        issue.setSystem(systemStr);
         issue.setStatus("待员工处理");
         issueRepository.save(issue);
 
+        // 删除旧的系统分配，创建新的
+        systemAssignmentRepository.deleteByIssueId(issue.getId());
+        for (String sysName : systems) {
+            var sysInfo = systemInfoRepository.findByName(sysName);
+            if (sysInfo.isPresent() && sysInfo.get().getLeader() != null && !sysInfo.get().getLeader().isBlank()) {
+                var owner = userRepository.findByName(sysInfo.get().getLeader());
+                if (owner.isPresent()) {
+                    systemAssignmentRepository.save(new IssueSystemAssignment(issue.getId(), sysName, owner.get().getId()));
+                }
+            }
+        }
+
         addLog(issue.getId(), userId, "分派问题",
                 "团队: " + request.responsibleTeam() + ", 责任人: " + personName
-                + (request.system() != null ? ", 系统: " + request.system() : ""));
+                + (!systems.isEmpty() ? ", 系统: " + systemStr : ""));
         return toResponse(issue);
     }
 
@@ -245,7 +275,9 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
         }
         saveUndoInfo(issue, userId);
         if (request.approved()) {
-            issue.setStatus("待确认");
+            // 若有关联系统，进入"解决中"状态；否则直接进入"待确认"
+            boolean hasSystems = issue.getSystem() != null && !issue.getSystem().isBlank();
+            issue.setStatus(hasSystems ? "解决中" : "待确认");
             addLog(issue.getId(), userId, "管理员审核通过", request.comment());
         } else {
             issue.setStatus("待员工处理");
@@ -328,6 +360,112 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
         issueRepository.save(issue);
         addLog(issue.getId(), userId, "管理员编辑", "修改了问题信息");
         return toResponse(issue);
+    }
+
+    @Override
+    public void completeSystemAssignment(Long assignmentId, Long userId, String completionNote) {
+        var assignment = systemAssignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new RuntimeException("系统分配不存在"));
+        if (assignment.isCompleted()) {
+            throw new RuntimeException("该分配已完成");
+        }
+        if (!assignment.getSystemOwnerId().equals(userId)) {
+            throw new RuntimeException("只有系统负责人可以标记完成");
+        }
+        assignment.setCompleted(true);
+        assignment.setCompletedAt(java.time.LocalDateTime.now());
+        if (completionNote != null && !completionNote.isBlank()) {
+            if (completionNote.length() > 300) {
+                throw new RuntimeException("完成情况不能超过300字");
+            }
+            assignment.setCompletionNote(completionNote.trim());
+        }
+        systemAssignmentRepository.save(assignment);
+        logRepository.save(new IssueLog(assignment.getIssueId(), userId, "系统负责人确认完成",
+                "系统: " + assignment.getSystemName()
+                + (assignment.getCompletionNote() != null ? "，备注: " + assignment.getCompletionNote() : "")));
+
+        // 检查该问题所有系统分配是否都已完成，若是则自动转为待确认
+        var allAssignments = systemAssignmentRepository.findByIssueIdOrderByCreatedAtAsc(assignment.getIssueId());
+        boolean allCompleted = allAssignments.stream().allMatch(IssueSystemAssignment::isCompleted);
+        if (allCompleted) {
+            var issue = find(assignment.getIssueId());
+            saveUndoInfo(issue, userId);
+            issue.setStatus("待确认");
+            issueRepository.save(issue);
+            addLog(issue.getId(), userId, "所有系统负责人已完成", "自动转为待确认");
+        }
+    }
+
+    @Override
+    public IssueResponse feedbackToSubmitter(Long issueId, Long userId) {
+        var issue = find(issueId);
+        if (!"待确认".equals(issue.getStatus())) {
+            throw new RuntimeException("当前状态不允许反馈，请等待所有系统负责人完成");
+        }
+        saveUndoInfo(issue, userId);
+        issue.setStatus("待确认");
+        issueRepository.save(issue);
+        addLog(issue.getId(), userId, "反馈给提出人", "所有系统负责人已完成，请提出人确认");
+        return toResponse(issue);
+    }
+
+    @Override
+    public List<IssueSystemAssignment> getSystemAssignments(Long issueId) {
+        return systemAssignmentRepository.findByIssueIdOrderByCreatedAtAsc(issueId);
+    }
+
+    @Override
+    public List<Map<String, Object>> listPending(Long currentUserId,
+                                                  boolean isAdmin, boolean isIssueAdmin,
+                                                  String status, Long ownerId) {
+        // 查询所有涉及系统的 issue（system 字段非空）
+        var spec = (Specification<IssueFeedback>) (root, query, cb) ->
+                cb.and(
+                    cb.isNotNull(root.get("system")),
+                    cb.notEqual(root.get("system"), "")
+                );
+        List<IssueFeedback> issues = issueRepository.findAll(spec,
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (IssueFeedback issue : issues) {
+            List<IssueSystemAssignment> assignments = systemAssignmentRepository
+                    .findByIssueIdOrderByCreatedAtAsc(issue.getId());
+            User submitter = userRepository.findById(issue.getSubmitterId()).orElse(null);
+
+            for (IssueSystemAssignment asg : assignments) {
+                // 按负责人筛选
+                if (ownerId != null && !asg.getSystemOwnerId().equals(ownerId)) continue;
+                // 按完成状态筛选
+                if ("pending".equals(status) && asg.isCompleted()) continue;
+                if ("completed".equals(status) && !asg.isCompleted()) continue;
+
+                User owner = userRepository.findById(asg.getSystemOwnerId()).orElse(null);
+                Map<String, Object> row = new java.util.LinkedHashMap<>();
+                row.put("assignmentId", asg.getId());
+                row.put("issueId", issue.getId());
+                row.put("issueCode", issue.getIssueCode());
+                row.put("title", issue.getTitle());
+                row.put("description", issue.getDescription());
+                row.put("submitterName", submitter != null ? submitter.getName() : "");
+                row.put("systemName", asg.getSystemName());
+                row.put("systemOwnerId", asg.getSystemOwnerId());
+                row.put("systemOwnerName", owner != null ? owner.getName() : "");
+                row.put("completed", asg.isCompleted());
+                row.put("completedAt", asg.getCompletedAt());
+                row.put("completionNote", asg.getCompletionNote());
+                row.put("temporarySolution", issue.getTemporarySolution());
+                row.put("permanentSolution", issue.getPermanentSolution());
+                row.put("temporaryDeadline", issue.getTemporaryDeadline());
+                row.put("permanentDeadline", issue.getPermanentDeadline());
+                row.put("status", issue.getStatus());
+                row.put("canComplete", !asg.isCompleted() && asg.getSystemOwnerId().equals(currentUserId));
+                result.add(row);
+            }
+        }
+        return result;
     }
 
     // ==================== 辅助方法 ====================

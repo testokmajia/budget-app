@@ -38,6 +38,12 @@ const routes = [
         meta: { title: '科技问题管理' },
       },
       {
+        path: 'pending',
+        name: 'Pending',
+        component: () => import('@/views/pending/PendingView.vue'),
+        meta: { title: '问题解决实施' },
+      },
+      {
         path: 'admin',
         name: 'Admin',
         component: () => import('@/views/admin/AdminView.vue'),

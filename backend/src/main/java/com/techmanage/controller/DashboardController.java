@@ -2,12 +2,10 @@ package com.techmanage.controller;
 
 import com.techmanage.common.ApiResponse;
 import com.techmanage.dto.DashboardStats;
-import com.techmanage.entity.Checklist;
 import com.techmanage.entity.IssueFeedback;
 import com.techmanage.entity.RewardPunishment;
 import com.techmanage.entity.Team;
 import com.techmanage.entity.User;
-import com.techmanage.repository.ChecklistRepository;
 import com.techmanage.repository.IssueFeedbackRepository;
 import com.techmanage.repository.RewardPunishmentRepository;
 import com.techmanage.repository.TeamRepository;
@@ -36,18 +34,15 @@ public class DashboardController {
     private final IssueFeedbackRepository issueRepository;
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
-    private final ChecklistRepository checklistRepository;
     private final RewardPunishmentRepository rewardRepository;
 
     public DashboardController(IssueFeedbackRepository issueRepository,
                                TeamRepository teamRepository,
                                UserRepository userRepository,
-                               ChecklistRepository checklistRepository,
                                RewardPunishmentRepository rewardRepository) {
         this.issueRepository = issueRepository;
         this.teamRepository = teamRepository;
         this.userRepository = userRepository;
-        this.checklistRepository = checklistRepository;
         this.rewardRepository = rewardRepository;
     }
 
@@ -189,17 +184,6 @@ public class DashboardController {
             pendingTasks.add(new DashboardStats.PendingTask(
                 "待确认完成", "您提交的问题等待确认", myConfirm,
                 "Issue", "statuses=待确认"
-            ));
-        }
-
-        // Pending checklists
-        long pendingChecklists = checklistRepository.findByUserId(userId).stream()
-            .filter(c -> !"已完成".equals(c.getStatus()))
-            .count();
-        if (pendingChecklists > 0) {
-            pendingTasks.add(new DashboardStats.PendingTask(
-                "待办清单", "清单管理中未完成的事项", pendingChecklists,
-                "Checklist", ""
             ));
         }
 

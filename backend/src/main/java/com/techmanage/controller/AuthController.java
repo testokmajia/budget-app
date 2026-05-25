@@ -5,6 +5,7 @@ import com.techmanage.dto.*;
 import com.techmanage.service.AuthService;
 import com.techmanage.service.QrLoginService;
 import jakarta.validation.Valid;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -52,5 +53,13 @@ public class AuthController {
     @PostMapping("/wechat-login")
     public ApiResponse<LoginResponse> miniappLogin(@RequestParam String code) {
         return ApiResponse.ok(qrLoginService.miniappLogin(code));
+    }
+
+    @PutMapping("/password")
+    public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request,
+                                             Authentication auth) {
+        Long userId = (Long) auth.getPrincipal();
+        authService.changePassword(userId, request);
+        return ApiResponse.ok(null);
     }
 }

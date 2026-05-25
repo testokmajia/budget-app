@@ -1,14 +1,15 @@
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick, inject } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Download, ArrowDown, Edit, Share, UserFilled, DocumentAdd, Select, CircleCheck, CircleClose, CloseBold, Switch, MoreFilled, RefreshLeft } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { getList, getById, create, assign, submitSolution, reviewByLeader, reviewByAdmin, confirm, reject, closeIssue, updateIssue, exportIssues, submitChangeProposal, getPendingProposals, reviewProposal, undoIssue } from '@/api/issue'
+import { getList, getById, create, assign, submitSolution, reviewByLeader, reviewByAdmin, confirm, reject, closeIssue, updateIssue, exportIssues, submitChangeProposal, getPendingProposals, reviewProposal, undoIssue, uploadAttachments, getAttachments, deleteAttachment, getSystemAssignments, feedbackToSubmitter } from '@/api/issue'
 import { getUsers, getCategories, getDepartments, getTeams, getOccasions, getSystems } from '@/api/admin'
 
 const userStore = useUserStore()
 const route = useRoute()
+const refreshBadges = inject('refreshBadges', null)
 
 // === Table state ===
 const loading = ref(false)
@@ -23,7 +24,7 @@ const sortDir = ref('desc')
 const filters = reactive({
   statuses: [],
   submitterIds: [],
-  submitterDepartment: '',
+  submitterDepartments: [],
   occasionId: null,
   issueType: '',
   responsibleTeam: '',
@@ -37,6 +38,7 @@ const statusOptions = [
   { label: '待员工处理', value: '待员工处理' },
   { label: '待组长审核', value: '待组长审核' },
   { label: '待管理员审核', value: '待管理员审核' },
+  { label: '解决中', value: '解决中' },
   { label: '待确认', value: '待确认' },
   { label: '已完成', value: '已完成' },
   { label: '已驳回', value: '已驳回' },
@@ -56,6 +58,7 @@ const createVisible = ref(false)
 const createFormRef = ref(null)
 const createForm = reactive({
   submitterDepartment: '',
+  submitterId: null,
   occasionId: null,
   meetingDepartment: '',
   meetingDate: '',
@@ -67,6 +70,7 @@ const createRules = {
   title: [{ required: true, message: '请输入问题标题', trigger: 'blur' }],
   description: [{ required: true, message: '请输入问题详情', trigger: 'blur' }],
   submitterDepartment: [{ required: true, message: '请选择提出部门', trigger: 'change' }],
+  submitterId: [{ required: true, message: '请选择提出人', trigger: 'change' }],
 }
 
 const selectedOccasion = computed(() => {
@@ -76,12 +80,21 @@ const selectedOccasion = computed(() => {
 const showMeetingFields = computed(() => {
   return selectedOccasion.value && selectedOccasion.value.name === '业务协调会'
 })
+// 需求6: 提出人联动 - 根据部门过滤用户
+const createFormSubmitterOptions = computed(() => {
+  if (!createForm.submitterDepartment) return allUsers.value
+  return allUsers.value.filter(u => u.department === createForm.submitterDepartment)
+})
+const editFormSubmitterOptions = computed(() => {
+  if (!editForm.submitterDepartment) return allUsers.value
+  return allUsers.value.filter(u => u.department === editForm.submitterDepartment)
+})
 
 // === Assign dialog ===
 const assignVisible = ref(false)
 const assignId = ref(null)
 const assignFormRef = ref(null)
-const assignForm = reactive({ responsibleTeam: '', responsiblePersonId: null, system: '' })
+const assignForm = reactive({ responsibleTeam: '', responsiblePersonId: null, systems: [] })
 const assignRules = {
   responsibleTeam: [{ required: true, message: '请选择责任团队', trigger: 'change' }],
   responsiblePersonId: [{ required: true, message: '请选择责任人', trigger: 'change' }],
@@ -109,9 +122,11 @@ const editTeamSystems = computed(() => {
   if (!editForm.responsibleTeam) return []
   return systems.value.filter(s => s.team === editForm.responsibleTeam && s.enabled)
 })
-watch(() => assignForm.system, (sysName) => {
-  if (!sysName) return
-  const sys = systems.value.find(s => s.name === sysName)
+// 需求8: 系统多选时，自动选第一个系统的负责人
+watch(() => assignForm.systems, (sysNames) => {
+  if (!sysNames || sysNames.length === 0) return
+  const firstSys = sysNames[0]
+  const sys = systems.value.find(s => s.name === firstSys)
   if (sys && sys.leader) {
     const owner = allUsers.value.find(u => u.name === sys.leader)
     if (owner) assignForm.responsiblePersonId = owner.id
@@ -129,9 +144,11 @@ const solutionForm = reactive({
   permanentSolution: '',
   permanentDeadline: '',
 })
+const solutionIssue = ref(null)
 const solutionRules = {
-  temporarySolution: [{ required: true, message: '请输入临时整改方案', trigger: 'blur' }],
-  temporaryDeadline: [{ required: true, message: '请选择临时整改时限', trigger: 'change' }],
+  rootCause: [{ required: true, message: '请输入产生原因', trigger: 'blur' }],
+  permanentSolution: [{ required: true, message: '请输入永久解决方案', trigger: 'blur' }],
+  permanentDeadline: [{ required: true, message: '请选择永久解决时限', trigger: 'change' }],
 }
 
 // === Reject dialog ===
@@ -175,6 +192,9 @@ const editRules = {
   description: [{ required: true, message: '请输入问题详情', trigger: 'blur' }],
   submitterDepartment: [{ required: true, message: '请选择提出部门', trigger: 'change' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }],
+  submitterId: [{ required: true, message: '请选择提出人', trigger: 'change' }],
+  occasionId: [{ required: true, message: '请选择提出场合', trigger: 'change' }],
+  issueType: [{ required: true, message: '请选择问题类型', trigger: 'change' }],
 }
 
 // === Workflow review dialog (leader/admin) ===
@@ -360,7 +380,7 @@ const ledTeamMembers = computed(() => {
 })
 const hasActiveFilters = computed(() => {
   return filters.submitterIds.length > 0 ||
-    filters.submitterDepartment ||
+    filters.submitterDepartments.length > 0 ||
     filters.occasionId ||
     filters.issueType ||
     filters.responsibleTeam ||
@@ -381,7 +401,7 @@ async function fetchData() {
     }
     if (filters.statuses.length) params.statuses = filters.statuses.join(',')
     if (filters.submitterIds.length) params.submitterIds = filters.submitterIds.join(',')
-    if (filters.submitterDepartment) params.submitterDepartment = filters.submitterDepartment
+    if (filters.submitterDepartments.length) params.submitterDepartments = filters.submitterDepartments.join(',')
     if (filters.occasionId) params.occasionId = filters.occasionId
     if (filters.issueType) params.issueType = filters.issueType
     if (filters.responsibleTeam) params.responsibleTeam = filters.responsibleTeam
@@ -438,7 +458,7 @@ const defaultStatuses = computed(() => statusOptions.filter(s => s.value !== '�
 
 function handleResetFilters() {
   Object.assign(filters, {
-    statuses: [...defaultStatuses.value], submitterIds: [], submitterDepartment: '',
+    statuses: [...defaultStatuses.value], submitterIds: [], submitterDepartments: [],
     occasionId: null, issueType: '', responsibleTeam: '',
     responsiblePersonId: null, dateFrom: '', dateTo: '',
   })
@@ -456,14 +476,17 @@ function handleSizeChange() {
 }
 
 // === Create ===
+const uploadFiles = ref([])
 function handleCreate() {
   createForm.submitterDepartment = userStore.user?.department || ''
+  createForm.submitterId = userStore.user?.id || null
   createForm.occasionId = null
   createForm.meetingDepartment = ''
   createForm.meetingDate = ''
   createForm.title = ''
   createForm.description = ''
   createForm.issueType = ''
+  uploadFiles.value = []
   createVisible.value = true
 }
 async function handleCreateSubmit() {
@@ -474,9 +497,14 @@ async function handleCreateSubmit() {
     data.meetingDepartment = ''
     data.meetingDate = ''
   }
-  await create(data)
+  const res = await create(data)
   ElMessage.success('问题已提交')
   createVisible.value = false
+  // 上传附件
+  const issueId = res.data.id
+  if (uploadFiles.value.length > 0) {
+    try { await uploadAttachments(issueId, uploadFiles.value) } catch { /* ignore */ }
+  }
   fetchData()
 }
 
@@ -485,7 +513,7 @@ function handleAssign(row) {
   assignId.value = row.id
   assignForm.responsibleTeam = row.responsibleTeam || ''
   assignForm.responsiblePersonId = row.responsiblePersonId || null
-  assignForm.system = row.system || ''
+  assignForm.systems = row.system ? row.system.split(',').map(s => s.trim()).filter(Boolean) : []
   assignVisible.value = true
 }
 async function handleAssignSubmit() {
@@ -494,12 +522,14 @@ async function handleAssignSubmit() {
   await assign(assignId.value, { ...assignForm })
   ElMessage.success('已分派')
   assignVisible.value = false
+  refreshBadges?.()
   fetchData()
 }
 
 // === Solution ===
 function handleSolution(row) {
   solutionId.value = row.id
+  solutionIssue.value = row
   solutionForm.temporarySolution = row.temporarySolution || ''
   solutionForm.temporaryDeadline = row.temporaryDeadline || ''
   solutionForm.rootCause = row.rootCause || ''
@@ -630,7 +660,7 @@ async function handleExport() {
   const params = {}
   if (filters.statuses.length) params.statuses = filters.statuses.join(',')
   if (filters.submitterIds.length) params.submitterIds = filters.submitterIds.join(',')
-  if (filters.submitterDepartment) params.submitterDepartment = filters.submitterDepartment
+  if (filters.submitterDepartments.length) params.submitterDepartments = filters.submitterDepartments.join(',')
   if (filters.occasionId) params.occasionId = filters.occasionId
   if (filters.issueType) params.issueType = filters.issueType
   if (filters.responsibleTeam) params.responsibleTeam = filters.responsibleTeam
@@ -649,17 +679,23 @@ async function handleExport() {
 }
 
 // === Detail ===
+const detailAttachments = ref([])
+const detailSystemAssignments = ref([])
 async function handleDetail(row) {
   try {
     const res = await getById(row.id)
     detail.value = res.data
     detailVisible.value = true
+    // 加载附件
+    getAttachments(row.id).then(r => { detailAttachments.value = r.data || [] }).catch(() => { detailAttachments.value = [] })
+    // 加载系统分配状态
+    getSystemAssignments(row.id).then(r => { detailSystemAssignments.value = r.data || [] }).catch(() => { detailSystemAssignments.value = [] })
   } catch { /* ignore */ }
 }
 
 // === Helpers ===
 function getStatusType(status) {
-  const map = { '待分派': 'info', '待员工处理': 'warning', '待组长审核': 'warning', '待管理员审核': '', '待确认': '', '已完成': 'success', '已驳回': 'danger', '已关闭': 'info' }
+  const map = { '待分派': 'info', '待员工处理': 'warning', '待组长审核': 'warning', '待管理员审核': '', '解决中': 'warning', '待确认': '', '已完成': 'success', '已驳回': 'danger', '已关闭': 'info' }
   return map[status] || ''
 }
 function formatDateTime(dt) {
@@ -683,6 +719,20 @@ async function handleUndo(row) {
     await undoIssue(row.id)
     ElMessage.success('已撤回')
     fetchData()
+  } catch { /* canceled */ }
+}
+
+async function handleFeedbackToSubmitter(row) {
+  try {
+    await ElMessageBox.confirm('确认所有负责人已完成？将反馈给问题提出人。', '确认反馈', { type: 'warning' })
+    await feedbackToSubmitter(row.id)
+    ElMessage.success('已反馈给提出人')
+    refreshBadges?.()
+    fetchData()
+    if (detailVisible.value && detail.value?.id === row.id) {
+      const res = await getById(row.id)
+      detail.value = res.data
+    }
   } catch { /* canceled */ }
 }
 
@@ -710,6 +760,9 @@ function getRowActions(row) {
   if (canManage.value && row.status === '待管理员审核') {
     actions.push({ label: '审核', icon: Select, type: 'primary', handler: () => openAdminReview(row) })
   }
+  if (canManage.value && (row.status === '解决中' || row.status === '待确认')) {
+    actions.push({ label: '反馈给提出人', icon: CircleCheck, type: 'success', handler: () => handleFeedbackToSubmitter(row) })
+  }
   if (row.status === '待确认' && isSubmitter(row)) {
     actions.push({ label: '确认', icon: CircleCheck, type: 'success', handler: () => handleConfirm(row, true) })
     actions.push({ label: '退回', icon: CircleClose, type: 'warning', handler: () => handleConfirm(row, false) })
@@ -733,6 +786,17 @@ watch(() => createForm.occasionId, () => {
     createForm.meetingDepartment = ''
     createForm.meetingDate = ''
   }
+})
+// 需求6: 部门变更时清空提出人（同步执行，确保 handleCreate 先清再赋值）
+watch(() => createForm.submitterDepartment, () => {
+  createForm.submitterId = null
+}, { flush: 'sync' })
+watch(() => editForm.submitterDepartment, () => {
+  editForm.submitterId = null
+}, { flush: 'sync' })
+// 需求6: 责任团队变更时清空责任人
+watch(() => editForm.responsibleTeam, () => {
+  editForm.responsiblePersonId = null
 })
 
 onMounted(() => {
@@ -767,7 +831,7 @@ onUnmounted(() => {
       <el-select v-model="filters.submitterIds" placeholder="提出人" clearable multiple collapse-tags filterable style="width: 180px" @change="handleFilter">
         <el-option v-for="u in allUsers" :key="u.id" :label="u.name" :value="u.id" />
       </el-select>
-      <el-select v-model="filters.submitterDepartment" placeholder="提出部门" clearable style="width: 140px" @change="handleFilter">
+      <el-select v-model="filters.submitterDepartments" placeholder="提出部门" clearable multiple collapse-tags style="width: 180px" @change="handleFilter">
         <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.name" />
       </el-select>
       <el-select v-model="filters.occasionId" placeholder="提出场合" clearable style="width: 200px" @change="handleFilter">
@@ -856,6 +920,11 @@ onUnmounted(() => {
             <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.name" :disabled="!d.enabled" />
           </el-select>
         </el-form-item>
+        <el-form-item label="提出人" prop="submitterId">
+          <el-select v-model="createForm.submitterId" style="width: 100%" clearable filterable placeholder="请选择提出人">
+            <el-option v-for="u in createFormSubmitterOptions" :key="u.id" :label="`${u.name} (${u.department || '-'})`" :value="u.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="提出场合">
           <el-select v-model="createForm.occasionId" style="width: 100%" clearable placeholder="请选择提出场合">
             <el-option-group label="会议">
@@ -885,6 +954,20 @@ onUnmounted(() => {
             <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.name" :disabled="!c.enabled" />
           </el-select>
         </el-form-item>
+        <el-form-item label="附件">
+          <el-upload
+            v-model:file-list="uploadFiles"
+            :auto-upload="false"
+            multiple
+            :limit="10"
+            :before-upload="(file) => { if (file.size > 20*1024*1024) { ElMessage.warning('文件 ' + file.name + ' 超过20MB限制'); return false } return true }"
+          >
+            <el-button type="primary" plain>选择文件</el-button>
+            <template #tip>
+              <div style="font-size: 12px; color: #909399; margin-top: 6px">支持图片、PDF、Word、Excel，单文件≤20MB</div>
+            </template>
+          </el-upload>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
@@ -896,17 +979,9 @@ onUnmounted(() => {
     <el-dialog v-model="assignVisible" title="分配团队、系统和责任人" width="480px">
       <el-form ref="assignFormRef" :model="assignForm" :rules="assignRules" label-width="100px">
         <el-form-item label="责任团队" prop="responsibleTeam">
-          <el-select v-model="assignForm.responsibleTeam" style="width: 100%" placeholder="请选择责任团队" @change="assignForm.system = ''; assignForm.responsiblePersonId = null">
+          <el-select v-model="assignForm.responsibleTeam" style="width: 100%" placeholder="请选择责任团队" @change="assignForm.systems = []; assignForm.responsiblePersonId = null">
             <el-option v-for="t in teams" :key="t.id" :label="t.name" :value="t.name" :disabled="!t.enabled" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="涉及系统" v-if="assignForm.responsibleTeam">
-          <el-select v-model="assignForm.system" style="width: 100%" placeholder="请选择涉及系统" clearable filterable>
-            <el-option v-for="s in teamSystems" :key="s.id" :label="s.name" :value="s.name" />
-          </el-select>
-          <span v-if="teamSystems.length === 0" style="color: #909399; font-size: 12px;">
-            该团队未配置信息系统，请前往「系统管理 → 信息系统」配置
-          </span>
         </el-form-item>
         <el-form-item label="责任人" prop="responsiblePersonId">
           <el-select v-model="assignForm.responsiblePersonId" style="width: 100%" placeholder="请选择责任人" clearable filterable>
@@ -914,6 +989,14 @@ onUnmounted(() => {
           </el-select>
           <span v-if="assignForm.responsibleTeam && teamMembers.length === 0" style="color: #f56c6c; font-size: 12px;">
             该团队暂无成员
+          </span>
+        </el-form-item>
+        <el-form-item label="涉及系统" v-if="assignForm.responsibleTeam">
+          <el-select v-model="assignForm.systems" style="width: 100%" placeholder="请选择涉及系统" clearable filterable multiple collapse-tags>
+            <el-option v-for="s in systems" :key="s.id" :label="s.name" :value="s.name" />
+          </el-select>
+          <span v-if="systems.length === 0" style="color: #909399; font-size: 12px;">
+            该团队未配置信息系统，请前往「系统管理 → 信息系统」配置
           </span>
         </el-form-item>
       </el-form>
@@ -924,23 +1007,37 @@ onUnmounted(() => {
     </el-dialog>
 
     <!-- Solution dialog -->
-    <el-dialog v-model="solutionVisible" title="整改方案" width="600px">
+    <el-dialog v-model="solutionVisible" title="整改方案" width="750px">
+      <!-- 问题详情 -->
+      <div v-if="solutionIssue" class="solution-issue-info">
+        <div class="si-row"><span class="si-label">编号：</span>{{ solutionIssue.issueCode }}</div>
+        <div class="si-row"><span class="si-label">标题：</span>{{ solutionIssue.title }}</div>
+        <div class="si-row"><span class="si-label">描述：</span>{{ solutionIssue.description }}</div>
+        <div class="si-row"><span class="si-label">提出人：</span>{{ solutionIssue.submitterName }} / {{ solutionIssue.submitterDepartment }}</div>
+        <div class="si-row"><span class="si-label">状态：</span><el-tag size="small">{{ solutionIssue.status }}</el-tag></div>
+      </div>
       <el-form ref="solutionFormRef" :model="solutionForm" :rules="solutionRules" label-width="110px">
-        <el-form-item label="临时整改方案" prop="temporarySolution">
-          <el-input v-model="solutionForm.temporarySolution" type="textarea" :rows="4" maxlength="2000" show-word-limit />
+        <el-form-item label="产生原因" prop="rootCause" label-position="top">
+          <el-input v-model="solutionForm.rootCause" type="textarea" :rows="3" maxlength="500" show-word-limit />
         </el-form-item>
-        <el-form-item label="临时整改时限" prop="temporaryDeadline">
-          <el-date-picker v-model="solutionForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
-        </el-form-item>
-        <el-form-item label="产生原因">
-          <el-input v-model="solutionForm.rootCause" type="textarea" :rows="3" />
-        </el-form-item>
-        <el-form-item label="永久解决方案">
-          <el-input v-model="solutionForm.permanentSolution" type="textarea" :rows="3" maxlength="1000" show-word-limit />
-        </el-form-item>
-        <el-form-item label="永久解决时限">
-          <el-date-picker v-model="solutionForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
-        </el-form-item>
+        <div style="display: flex; gap: 20px; margin-bottom: 18px;">
+          <div style="flex: 1; min-width: 0;">
+            <el-form-item label="临时整改方案" label-position="top">
+              <el-input v-model="solutionForm.temporarySolution" type="textarea" :rows="8" maxlength="2000" show-word-limit />
+            </el-form-item>
+            <el-form-item label="临时整改时限" label-position="top">
+              <el-date-picker v-model="solutionForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+            </el-form-item>
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <el-form-item label="永久解决方案" prop="permanentSolution" label-position="top">
+              <el-input v-model="solutionForm.permanentSolution" type="textarea" :rows="8" maxlength="1000" show-word-limit />
+            </el-form-item>
+            <el-form-item label="永久解决时限" prop="permanentDeadline" label-position="top">
+              <el-date-picker v-model="solutionForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+            </el-form-item>
+          </div>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="solutionVisible = false">取消</el-button>
@@ -1017,16 +1114,16 @@ onUnmounted(() => {
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="提出人">
+            <el-form-item label="提出人" prop="submitterId" required>
               <el-select v-model="editForm.submitterId" style="width: 100%" clearable filterable>
-                <el-option v-for="u in allUsers" :key="u.id" :label="`${u.name} (${u.department || '-'})`" :value="u.id" />
+                <el-option v-for="u in editFormSubmitterOptions" :key="u.id" :label="`${u.name} (${u.department || '-'})`" :value="u.id" />
               </el-select>
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="提出场合">
+            <el-form-item label="提出场合" prop="occasionId" required>
               <el-select v-model="editForm.occasionId" style="width: 100%" clearable>
                 <el-option-group label="会议">
                   <el-option v-for="o in occasions.filter(x => x.type === 'MEETING' && x.enabled)" :key="o.id" :label="o.name" :value="o.id" />
@@ -1038,7 +1135,7 @@ onUnmounted(() => {
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="问题类型">
+            <el-form-item label="问题类型" prop="issueType" required>
               <el-select v-model="editForm.issueType" style="width: 100%" clearable>
                 <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.name" :disabled="!c.enabled" />
               </el-select>
@@ -1083,30 +1180,30 @@ onUnmounted(() => {
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="临时整改时限">
-              <el-date-picker v-model="editForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
-            </el-form-item>
-          </el-col>
         </el-row>
-        <el-form-item label="临时整改方案">
-          <el-input v-model="editForm.temporarySolution" type="textarea" :rows="2" maxlength="2000" show-word-limit />
-        </el-form-item>
         <el-form-item label="产生原因">
           <el-input v-model="editForm.rootCause" type="textarea" :rows="2" maxlength="2000" />
         </el-form-item>
-        <el-row :gutter="20">
-          <el-col :span="12">
+        <div style="display: flex; gap: 20px; margin-bottom: 18px;">
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; margin-bottom: 12px; color: #e6a23c; font-size: 14px;">临时方案</div>
+            <el-form-item label="临时整改方案">
+              <el-input v-model="editForm.temporarySolution" type="textarea" :rows="2" maxlength="2000" show-word-limit />
+            </el-form-item>
+            <el-form-item label="临时整改时限">
+              <el-date-picker v-model="editForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+            </el-form-item>
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; margin-bottom: 12px; color: #409eff; font-size: 14px;">永久方案</div>
             <el-form-item label="永久解决方案">
               <el-input v-model="editForm.permanentSolution" type="textarea" :rows="2" maxlength="1000" show-word-limit />
             </el-form-item>
-          </el-col>
-          <el-col :span="12">
             <el-form-item label="永久解决时限">
               <el-date-picker v-model="editForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
             </el-form-item>
-          </el-col>
-        </el-row>
+          </div>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
@@ -1115,23 +1212,31 @@ onUnmounted(() => {
     </el-dialog>
 
     <!-- Change proposal dialog -->
-    <el-dialog v-model="changeProposalVisible" title="提交变更申请" width="600px">
+    <el-dialog v-model="changeProposalVisible" title="提交变更申请" width="750px">
       <el-form ref="changeProposalFormRef" :model="changeProposalForm" :rules="changeProposalRules" label-width="110px">
-        <el-form-item label="临时整改方案" prop="temporarySolution">
-          <el-input v-model="changeProposalForm.temporarySolution" type="textarea" :rows="3" maxlength="2000" show-word-limit />
-        </el-form-item>
-        <el-form-item label="临时整改时限" prop="temporaryDeadline">
-          <el-date-picker v-model="changeProposalForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
-        </el-form-item>
         <el-form-item label="产生原因">
           <el-input v-model="changeProposalForm.rootCause" type="textarea" :rows="2" maxlength="2000" />
         </el-form-item>
-        <el-form-item label="永久解决方案">
-          <el-input v-model="changeProposalForm.permanentSolution" type="textarea" :rows="2" maxlength="1000" show-word-limit />
-        </el-form-item>
-        <el-form-item label="永久解决时限">
-          <el-date-picker v-model="changeProposalForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
-        </el-form-item>
+        <div style="display: flex; gap: 20px; margin-bottom: 18px;">
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; margin-bottom: 12px; color: #e6a23c; font-size: 14px;">临时方案</div>
+            <el-form-item label="临时整改方案" prop="temporarySolution">
+              <el-input v-model="changeProposalForm.temporarySolution" type="textarea" :rows="3" maxlength="2000" show-word-limit />
+            </el-form-item>
+            <el-form-item label="临时整改时限" prop="temporaryDeadline">
+              <el-date-picker v-model="changeProposalForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+            </el-form-item>
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; margin-bottom: 12px; color: #409eff; font-size: 14px;">永久方案</div>
+            <el-form-item label="永久解决方案">
+              <el-input v-model="changeProposalForm.permanentSolution" type="textarea" :rows="3" maxlength="1000" show-word-limit />
+            </el-form-item>
+            <el-form-item label="永久解决时限">
+              <el-date-picker v-model="changeProposalForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+            </el-form-item>
+          </div>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="changeProposalVisible = false">取消</el-button>
@@ -1239,20 +1344,34 @@ onUnmounted(() => {
               <el-descriptions-item label="涉及系统">{{ detail.system || '未指定' }}</el-descriptions-item>
 
               <template v-if="editingSolution">
-                <el-descriptions-item label="临时整改方案">
-                  <el-input v-model="editSolutionForm.temporarySolution" type="textarea" :rows="3" maxlength="2000" />
-                </el-descriptions-item>
-                <el-descriptions-item label="临时整改时限">
-                  <el-date-picker v-model="editSolutionForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
-                </el-descriptions-item>
                 <el-descriptions-item label="产生原因">
                   <el-input v-model="editSolutionForm.rootCause" type="textarea" :rows="2" maxlength="2000" />
                 </el-descriptions-item>
-                <el-descriptions-item label="永久解决方案">
-                  <el-input v-model="editSolutionForm.permanentSolution" type="textarea" :rows="2" maxlength="1000" />
-                </el-descriptions-item>
-                <el-descriptions-item label="永久解决时限">
-                  <el-date-picker v-model="editSolutionForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+                <el-descriptions-item label="方案编辑">
+                  <div style="display: flex; gap: 16px;">
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="font-weight: 600; margin-bottom: 8px; color: #e6a23c; font-size: 13px;">临时方案</div>
+                      <div style="margin-bottom: 8px;">
+                        <div style="color: #606266; font-size: 13px; margin-bottom: 4px;">临时整改方案</div>
+                        <el-input v-model="editSolutionForm.temporarySolution" type="textarea" :rows="3" maxlength="2000" />
+                      </div>
+                      <div>
+                        <div style="color: #606266; font-size: 13px; margin-bottom: 4px;">临时整改时限</div>
+                        <el-date-picker v-model="editSolutionForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+                      </div>
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="font-weight: 600; margin-bottom: 8px; color: #409eff; font-size: 13px;">永久方案</div>
+                      <div style="margin-bottom: 8px;">
+                        <div style="color: #606266; font-size: 13px; margin-bottom: 4px;">永久解决方案</div>
+                        <el-input v-model="editSolutionForm.permanentSolution" type="textarea" :rows="3" maxlength="1000" />
+                      </div>
+                      <div>
+                        <div style="color: #606266; font-size: 13px; margin-bottom: 4px;">永久解决时限</div>
+                        <el-date-picker v-model="editSolutionForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+                      </div>
+                    </div>
+                  </div>
                 </el-descriptions-item>
                 <el-descriptions-item label="">
                   <div style="display: flex; gap: 8px">
@@ -1281,8 +1400,42 @@ onUnmounted(() => {
             </el-descriptions>
           </div>
 
-          <!-- Right: timeline -->
+          <!-- Right: timeline + attachments + systems -->
           <div class="detail-right">
+            <!-- System assignments (admin) -->
+            <div v-if="detailSystemAssignments.length > 0 && canManage" style="margin-bottom: 16px;">
+              <h4 style="margin: 0 0 8px">系统负责人完成状态</h4>
+              <div v-for="sa in detailSystemAssignments" :key="sa.id"
+                   style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #f7f8fa; border-radius: 6px; margin-bottom: 4px; font-size: 13px;">
+                <div>
+                  <span style="font-weight: 500;">{{ sa.systemOwnerName }}</span>
+                  <span style="color: #909399; margin-left: 4px;">({{ sa.systemName }})</span>
+                </div>
+                <el-tag :type="sa.completed ? 'success' : 'info'" size="small">{{ sa.completed ? '已完成' : '未完成' }}</el-tag>
+              </div>
+              <el-button
+                v-if="detail.status === '解决中' || detail.status === '待确认'"
+                type="success" size="small" style="margin-top: 8px; width: 100%;"
+                :disabled="detailSystemAssignments.some(sa => !sa.completed)"
+                @click="handleFeedbackToSubmitter(detail)"
+              >
+                <span v-if="detailSystemAssignments.some(sa => !sa.completed)">
+                  尚有 {{ detailSystemAssignments.filter(sa => !sa.completed).length }} 位负责人未完成
+                </span>
+                <span v-else>反馈给问题提出人</span>
+              </el-button>
+            </div>
+            <!-- Attachments -->
+            <div v-if="detailAttachments.length > 0" style="margin-bottom: 16px;">
+              <h4 style="margin: 0 0 8px">附件 ({{ detailAttachments.length }})</h4>
+              <div v-for="att in detailAttachments" :key="att.id"
+                   style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #f7f8fa; border-radius: 6px; margin-bottom: 4px; font-size: 13px;">
+                <a :href="att.filePath" target="_blank" style="color: #409eff; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;">
+                  {{ att.fileName }}
+                </a>
+                <span style="color: #909399; font-size: 12px; white-space: nowrap;">{{ (att.fileSize / 1024).toFixed(1) }} KB</span>
+              </div>
+            </div>
             <h4 style="margin: 0 0 12px">操作日志</h4>
             <el-timeline>
               <el-timeline-item
@@ -1553,5 +1706,24 @@ onUnmounted(() => {
   :deep(.el-drawer) {
     width: 100% !important;
   }
+}
+
+/* Solution dialog issue info */
+.solution-issue-info {
+  background: #f5f7fa;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+.solution-issue-info .si-row {
+  margin-bottom: 4px;
+  color: #606266;
+}
+.solution-issue-info .si-row:last-child {
+  margin-bottom: 0;
+}
+.solution-issue-info .si-label {
+  color: #909399;
 }
 </style>

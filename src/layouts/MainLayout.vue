@@ -1,16 +1,20 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, provide } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getStats } from '@/api/dashboard'
+import { changePassword } from '@/api/auth'
+import { ElMessage } from 'element-plus'
 import {
   HomeFilled,
+  Clock,
   List,
   Trophy,
   Warning,
   Setting,
   SwitchButton,
   Menu,
+  Lock,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -25,6 +29,7 @@ const pageTitle = computed(() => {
     '/checklist': '清单管理',
     '/reward': '奖惩记录',
     '/issue': '科技问题管理',
+    '/pending': '问题解决实施',
     '/admin': '系统管理',
   }
   return map[route.path] || ''
@@ -90,6 +95,8 @@ function onResizeEnd() {
   try { localStorage.setItem(STORAGE_KEY, String(sidebarWidth.value)) } catch { /* ignore */ }
 }
 
+provide('refreshBadges', fetchPendingTasks)
+
 onMounted(() => {
   fetchPendingTasks()
 })
@@ -112,9 +119,53 @@ const adminMenu = [
   { path: '/admin', title: '系统管理', icon: Setting },
 ]
 
+const showPending = computed(() => userStore.user?.department === '信息科技部')
+
 function navigate(path) {
   drawerVisible.value = false
   router.push(path)
+}
+
+// 修改密码
+const passwordVisible = ref(false)
+const passwordFormRef = ref(null)
+const passwordForm = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
+const passwordSubmitting = ref(false)
+
+const passwordRules = {
+  currentPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 8, message: '新密码至少8位', trigger: 'blur' },
+    { pattern: /^(?=.*[a-zA-Z])(?=.*\d)/, message: '新密码必须包含字母和数字', trigger: 'blur' },
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认新密码', trigger: 'blur' },
+    {
+      validator: (_rule, value, cb) => {
+        if (value !== passwordForm.newPassword) cb(new Error('两次输入的新密码不一致'))
+        else cb()
+      },
+      trigger: 'blur',
+    },
+  ],
+}
+
+async function handlePasswordSubmit() {
+  const valid = await passwordFormRef.value.validate().catch(() => null)
+  if (!valid) return
+  passwordSubmitting.value = true
+  try {
+    await changePassword({ ...passwordForm })
+    ElMessage.success('密码修改成功，请重新登录')
+    passwordVisible.value = false
+    userStore.logout()
+    router.push('/login')
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '修改失败')
+  } finally {
+    passwordSubmitting.value = false
+  }
 }
 
 function handleLogout() {
@@ -140,6 +191,10 @@ function handleLogout() {
         <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.title }}</span>
+        </el-menu-item>
+        <el-menu-item v-if="showPending" index="/pending">
+          <el-icon><Clock /></el-icon>
+          <span>问题解决实施</span>
         </el-menu-item>
         <el-menu-item
           v-for="item in adminMenu"
@@ -172,6 +227,10 @@ function handleLogout() {
         <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path" @click="navigate(item.path)">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.title }}</span>
+        </el-menu-item>
+        <el-menu-item v-if="showPending" index="/pending" @click="navigate('/pending')">
+          <el-icon><Clock /></el-icon>
+          <span>问题解决实施</span>
         </el-menu-item>
         <el-menu-item
           v-for="item in adminMenu"
@@ -209,6 +268,10 @@ function handleLogout() {
             {{ userStore.user?.name }}
             <span class="roles">({{ userStore.user?.roles?.join('、') }})</span>
           </span>
+          <el-button class="logout-btn" type="primary" text @click="passwordVisible = true">
+            <el-icon><Lock /></el-icon>
+            <span class="logout-text">修改密码</span>
+          </el-button>
           <el-button class="logout-btn" type="danger" text @click="handleLogout">
             <el-icon><SwitchButton /></el-icon>
             <span class="logout-text">退出登录</span>
@@ -219,6 +282,25 @@ function handleLogout() {
         <router-view />
       </el-main>
     </el-container>
+
+    <!-- 修改密码 -->
+    <el-dialog v-model="passwordVisible" title="修改密码" width="420px">
+      <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="100px">
+        <el-form-item label="当前密码" prop="currentPassword">
+          <el-input v-model="passwordForm.currentPassword" type="password" show-password />
+        </el-form-item>
+        <el-form-item label="新密码" prop="newPassword">
+          <el-input v-model="passwordForm.newPassword" type="password" show-password placeholder="至少8位，含字母和数字" />
+        </el-form-item>
+        <el-form-item label="确认新密码" prop="confirmPassword">
+          <el-input v-model="passwordForm.confirmPassword" type="password" show-password />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="passwordVisible = false">取消</el-button>
+        <el-button type="primary" :loading="passwordSubmitting" @click="handlePasswordSubmit">确认修改</el-button>
+      </template>
+    </el-dialog>
   </el-container>
 </template>
 

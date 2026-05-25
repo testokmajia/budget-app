@@ -18,6 +18,7 @@ import com.techmanage.entity.Team;
 import com.techmanage.entity.User;
 import com.techmanage.repository.DepartmentRepository;
 import com.techmanage.repository.IssueCategoryRepository;
+import com.techmanage.repository.IssueFeedbackRepository;
 import com.techmanage.repository.IssueOccasionRepository;
 import com.techmanage.repository.RoleRepository;
 import com.techmanage.repository.SystemInfoRepository;
@@ -31,6 +32,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -46,6 +48,7 @@ public class AdminServiceImpl implements AdminService {
     private final SystemInfoRepository systemInfoRepository;
     private final TeamRepository teamRepository;
     private final IssueOccasionRepository occasionRepository;
+    private final IssueFeedbackRepository issueFeedbackRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AdminServiceImpl(UserRepository userRepository,
@@ -55,6 +58,7 @@ public class AdminServiceImpl implements AdminService {
                            SystemInfoRepository systemInfoRepository,
                            TeamRepository teamRepository,
                            IssueOccasionRepository occasionRepository,
+                           IssueFeedbackRepository issueFeedbackRepository,
                            PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -63,6 +67,7 @@ public class AdminServiceImpl implements AdminService {
         this.systemInfoRepository = systemInfoRepository;
         this.teamRepository = teamRepository;
         this.occasionRepository = occasionRepository;
+        this.issueFeedbackRepository = issueFeedbackRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -166,13 +171,19 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    @Transactional
     public IssueCategory updateCategory(Long id, IssueCategoryRequest request) {
         IssueCategory category = categoryRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("分类不存在"));
+        String oldName = category.getName();
         category.setName(request.name());
         category.setSortOrder(request.sortOrder());
         category.setEnabled(request.enabled());
-        return categoryRepository.save(category);
+        IssueCategory saved = categoryRepository.save(category);
+        if (!request.name().equals(oldName)) {
+            issueFeedbackRepository.updateIssueType(oldName, request.name());
+        }
+        return saved;
     }
 
     @Override
@@ -195,13 +206,20 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    @Transactional
     public Department updateDepartment(Long id, DepartmentRequest request) {
         Department department = departmentRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("部门不存在"));
+        String oldName = department.getName();
         department.setName(request.name());
         department.setLeader(request.leader());
         department.setEnabled(request.enabled());
-        return departmentRepository.save(department);
+        Department saved = departmentRepository.save(department);
+        if (!request.name().equals(oldName)) {
+            issueFeedbackRepository.updateSubmitterDepartment(oldName, request.name());
+            userRepository.updateDepartment(oldName, request.name());
+        }
+        return saved;
     }
 
     @Override

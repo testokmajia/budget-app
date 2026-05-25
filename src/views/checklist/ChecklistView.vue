@@ -249,6 +249,11 @@ onUnmounted(() => {
         </template>
       </el-table-column>
       <el-table-column prop="responsiblePerson" label="责任人" width="90" />
+      <el-table-column label="建立日期" width="110">
+        <template #default="{ row }">
+          {{ row.createdAt ? row.createdAt.substring(0, 10) : '-' }}
+        </template>
+      </el-table-column>
       <el-table-column prop="plannedDate" label="计划完成" width="110" />
       <el-table-column prop="actualDate" label="实际完成" width="110" />
       <el-table-column label="操作" width="160" fixed="right">

@@ -23,3 +23,7 @@ export function wechatLogin(data) {
 export function bindWechat(data) {
   return request.post('/auth/qr/bind', data)
 }
+
+export function changePassword(data) {
+  return request.put('/auth/password', data)
+}

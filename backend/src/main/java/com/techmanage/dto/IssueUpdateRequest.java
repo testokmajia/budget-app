@@ -1,15 +1,16 @@
 package com.techmanage.dto;
 
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 
 public record IssueUpdateRequest(
     String title,
     String description,
     String submitterDepartment,
-    Long occasionId,
+    @NotNull Long occasionId,
     String meetingDepartment,
     LocalDate meetingDate,
-    String issueType,
+    @NotNull String issueType,
     String responsibleTeam,
     Long responsiblePersonId,
     String temporarySolution,
@@ -19,5 +20,5 @@ public record IssueUpdateRequest(
     LocalDate permanentDeadline,
     String status,
     String system,
-    Long submitterId
+    @NotNull Long submitterId
 ) {}

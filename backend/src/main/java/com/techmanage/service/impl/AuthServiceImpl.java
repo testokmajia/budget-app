@@ -1,5 +1,6 @@
 package com.techmanage.service.impl;
 
+import com.techmanage.dto.ChangePasswordRequest;
 import com.techmanage.dto.LoginRequest;
 import com.techmanage.dto.LoginResponse;
 import com.techmanage.dto.RegisterRequest;
@@ -67,6 +68,28 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
 
         return buildResponse(user);
+    }
+
+    @Override
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        var user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("用户不存在"));
+
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
+            throw new RuntimeException("当前密码错误");
+        }
+        if (!request.newPassword().equals(request.confirmPassword())) {
+            throw new RuntimeException("两次输入的新密码不一致");
+        }
+        if (request.newPassword().length() < 8) {
+            throw new RuntimeException("新密码至少8位");
+        }
+        if (!request.newPassword().matches(".*[a-zA-Z].*") || !request.newPassword().matches(".*[0-9].*")) {
+            throw new RuntimeException("新密码必须包含字母和数字");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
     }
 
     private LoginResponse buildResponse(User user) {

@@ -74,7 +74,7 @@ public class IssueFeedbackController {
             @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) List<String> statuses,
             @RequestParam(required = false) List<Long> submitterIds,
-            @RequestParam(required = false) String submitterDepartment,
+            @RequestParam(required = false) List<String> submitterDepartments,
             @RequestParam(required = false) Long occasionId,
             @RequestParam(required = false) String issueType,
             @RequestParam(required = false) String responsibleTeam,
@@ -86,7 +86,7 @@ public class IssueFeedbackController {
         boolean isItEmployee = "信息科技部".equals(u.getDepartment());
         List<Long> teamMemberIds = isItEmployee ? getTeamMemberIds(u) : Collections.emptyList();
         return ApiResponse.ok(issueService.list(page, size, sortBy, sortDir,
-                statuses, submitterIds, submitterDepartment, occasionId, issueType,
+                statuses, submitterIds, submitterDepartments, occasionId, issueType,
                 responsibleTeam, responsiblePersonId, dateFrom, dateTo,
                 u.getId(), isAdmin(u), isIssueAdmin(u), isItEmployee, myScope, teamMemberIds));
     }
@@ -187,7 +187,7 @@ public class IssueFeedbackController {
     public ResponseEntity<byte[]> export(Authentication auth,
                                           @RequestParam(required = false) List<String> statuses,
                                           @RequestParam(required = false) List<Long> submitterIds,
-                                          @RequestParam(required = false) String submitterDepartment,
+                                          @RequestParam(required = false) List<String> submitterDepartments,
                                           @RequestParam(required = false) Long occasionId,
                                           @RequestParam(required = false) String issueType,
                                           @RequestParam(required = false) String responsibleTeam,
@@ -198,7 +198,7 @@ public class IssueFeedbackController {
         boolean isItEmployee = "信息科技部".equals(u.getDepartment());
         List<Long> teamMemberIds = isItEmployee ? getTeamMemberIds(u) : Collections.emptyList();
         var result = issueService.list(0, Integer.MAX_VALUE, "createdAt", "desc",
-                statuses, submitterIds, submitterDepartment, occasionId, issueType,
+                statuses, submitterIds, submitterDepartments, occasionId, issueType,
                 responsibleTeam, responsiblePersonId, dateFrom, dateTo,
                 u.getId(), isAdmin(u), isIssueAdmin(u), isItEmployee, false, teamMemberIds);
 

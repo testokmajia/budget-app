@@ -6,9 +6,9 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
 public record IssueSolutionRequest(
-    @NotBlank String temporarySolution,
-    @NotNull LocalDate temporaryDeadline,
-    String rootCause,
-    @Size(max = 1000) String permanentSolution,
-    LocalDate permanentDeadline
+    String temporarySolution,
+    LocalDate temporaryDeadline,
+    @NotBlank String rootCause,
+    @NotBlank @Size(max = 1000) String permanentSolution,
+    @NotNull LocalDate permanentDeadline
 ) {}
