@@ -20,6 +20,7 @@ public record WeeklyReportResponse(
     LocalDateTime reviewedAt,
     String reviewerName,
     boolean merged,
+    Integer version,
     LocalDateTime createdAt,
     LocalDateTime updatedAt
 ) {}

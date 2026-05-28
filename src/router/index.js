@@ -41,7 +41,7 @@ const routes = [
         path: 'pending',
         name: 'Pending',
         component: () => import('@/views/pending/PendingView.vue'),
-        meta: { title: '问题解决实施' },
+        meta: { title: '系统问题实施' },
       },
       {
         path: 'weekly',

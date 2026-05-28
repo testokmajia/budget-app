@@ -132,6 +132,7 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
         rp.setDecisionDate(req.decisionDate());
         rp.setDocumentNo(req.documentNo());
         rp.setAttachmentUrl(req.attachmentUrl());
+        rp.setAttachmentFileName(req.attachmentFileName());
         rp.setScore("惩罚".equals(req.type()) ? -baseScore : baseScore);
     }
 
@@ -142,7 +143,7 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
         return new RewardPunishmentResponse(
             rp.getId(), rp.getType(), rp.getTitle(), rp.getDescription(),
             rp.getInvolvedPerson(), rp.getDepartment(), rp.getDecisionDate(),
-            rp.getDocumentNo(), rp.getAttachmentUrl(), creatorName,
+            rp.getDocumentNo(), rp.getAttachmentUrl(), rp.getAttachmentFileName(), creatorName,
             rp.getCreatedAt(), rp.getUpdatedAt(), rp.getScore()
         );
     }

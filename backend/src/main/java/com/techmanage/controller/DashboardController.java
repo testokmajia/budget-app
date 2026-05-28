@@ -204,10 +204,10 @@ public class DashboardController {
                 List<Long> memberIds = userRepository.findByNameIn(new ArrayList<>(memberNames)).stream()
                     .map(User::getId).collect(Collectors.toList());
                 if (!memberIds.isEmpty()) {
-                    long pendingReports = weeklyReportRepository.countPendingByUserIds(memberIds);
+                    long pendingReports = weeklyReportRepository.countSubmittedByUserIds(memberIds);
                     if (pendingReports > 0) {
                         pendingTasks.add(new DashboardStats.PendingTask(
-                            "待审批周报", "团队成员提交的周报待审批", pendingReports,
+                            "组内周报汇总", "团队成员提交的周报待汇总", pendingReports,
                             "Weekly", ""
                         ));
                     }

@@ -3,7 +3,7 @@ import { ref, watch, onMounted, inject } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { getCurrentWeekReport, saveReport, submitReport, getSmartDraft } from '@/api/weekly'
+import { getCurrentWeekReport, saveReport, submitReport, getSmartDraft, getMyReports } from '@/api/weekly'
 
 const userStore = useUserStore()
 const refreshBadges = inject('refreshBadges', null)
@@ -11,6 +11,7 @@ const refreshBadges = inject('refreshBadges', null)
 const loading = ref(false)
 const submittedStatus = ref('')
 const reportId = ref(null)
+const reportVersion = ref(1)
 const weekLabel = ref('')
 
 const doneItems = ref([{ item: '', progress: '' }])
@@ -110,6 +111,7 @@ async function handleSave() {
     const res = await saveReport(buildPayload())
     submittedStatus.value = res.data?.status || 'DRAFT'
     reportId.value = res.data?.id
+    reportVersion.value = res.data?.version || 1
     localStorage.removeItem(LS_KEY)
     ElMessage.success('草稿已保存')
   } catch (e) {
@@ -120,7 +122,8 @@ async function handleSave() {
 }
 
 async function handleSubmit() {
-  await ElMessageBox.confirm('提交后将由组长审批，确认提交？', '提示', { type: 'warning' })
+  const confirmMsg = isDraft() ? '提交后组长将汇总组内周报，确认提交？' : '将生成新的周报版本并重新提交，确认？'
+  await ElMessageBox.confirm(confirmMsg, '提示', { type: 'warning' })
   const payload = buildPayload()
   if (!payload.doneWork && !payload.planWork) {
     ElMessage.warning('请至少填写本周完成工作或下周工作计划')
@@ -129,11 +132,12 @@ async function handleSubmit() {
   loading.value = true
   try {
     const res = await submitReport(payload)
-    submittedStatus.value = res.data?.status || 'PENDING_REVIEW'
+    submittedStatus.value = res.data?.status || 'SUBMITTED'
     reportId.value = res.data?.id
+    reportVersion.value = res.data?.version || 1
     localStorage.removeItem(LS_KEY)
     refreshBadges?.()
-    ElMessage.success('已提交，等待组长审批')
+    ElMessage.success('已提交')
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '提交失败')
   } finally {
@@ -176,13 +180,13 @@ function formatDateRange() {
 
 const statusLabels = {
   'DRAFT': '草稿',
-  'PENDING_REVIEW': '已提交',
+  'SUBMITTED': '已提交',
   'APPROVED': '已通过',
   'REJECTED': '已驳回',
 }
 const statusTypes = {
   'DRAFT': 'info',
-  'PENDING_REVIEW': 'warning',
+  'SUBMITTED': 'warning',
   'APPROVED': 'success',
   'REJECTED': 'danger',
 }
@@ -195,6 +199,7 @@ async function init() {
     if (data) {
       reportId.value = data.id
       submittedStatus.value = data.status || ''
+      reportVersion.value = data.version || 1
       if (data.doneWork) {
         doneItems.value = parseItems(data.doneWork)
       }
@@ -214,10 +219,51 @@ async function init() {
   loadFromLocalStorage()
 }
 
-const isSubmitted = () => submittedStatus.value && submittedStatus.value !== 'DRAFT' && submittedStatus.value !== 'REJECTED'
-const isReadonly = () => isSubmitted()
+const isDraft = () => !submittedStatus.value || submittedStatus.value === 'DRAFT' || submittedStatus.value === 'REJECTED'
+const showVersion = () => reportVersion.value > 1
 
-onMounted(init)
+// Personal history
+const historyLoading = ref(false)
+const historyData = ref([])
+
+function formatHistoryDate(d) {
+  if (!d) return '-'
+  return typeof d === 'string' ? d.split('T')[0] : d
+}
+
+function formatHistoryDateTime(d) {
+  if (!d) return '-'
+  return typeof d === 'string' ? d.replace('T', ' ') : d
+}
+
+function historyParseLine(line) {
+  if (!line) return { item: '', progress: '' }
+  const idx = line.indexOf('|')
+  if (idx === -1) return { item: line, progress: '' }
+  return { item: line.substring(0, idx), progress: line.substring(idx + 1) }
+}
+
+function historyRenderItems(text) {
+  if (!text) return []
+  return text.split('\n').filter(s => s.trim()).map(historyParseLine)
+}
+
+async function fetchHistory() {
+  historyLoading.value = true
+  try {
+    const res = await getMyReports({})
+    historyData.value = res.data || []
+  } catch { historyData.value = [] }
+  finally { historyLoading.value = false }
+}
+
+const historyStatusLabels = { 'DRAFT': '草稿', 'SUBMITTED': '已提交', 'APPROVED': '已通过', 'REJECTED': '已驳回' }
+const historyStatusTypes = { 'DRAFT': 'info', 'SUBMITTED': 'warning', 'APPROVED': 'success', 'REJECTED': 'danger' }
+
+onMounted(() => {
+  init()
+  fetchHistory()
+})
 </script>
 
 <template>
@@ -228,19 +274,20 @@ onMounted(init)
       <el-tag :type="statusTypes[submittedStatus] || 'info'" size="default">
         {{ statusLabels[submittedStatus] || submittedStatus }}
       </el-tag>
+      <span v-if="showVersion()" class="version-badge">V{{ reportVersion }}</span>
     </div>
 
     <div class="section">
       <div class="section-header">
         <h3>本周完成工作</h3>
-        <el-button v-if="!isReadonly()" :icon="Plus" size="small" @click="addItem(doneItems)">添加</el-button>
+        <el-button :icon="Plus" size="small" @click="addItem(doneItems)">添加</el-button>
       </div>
       <div class="work-table">
         <div class="work-header">
           <span class="col-seq">序号</span>
           <span class="col-item">事项</span>
           <span class="col-progress">进展情况</span>
-          <span v-if="!isReadonly()" class="col-action"></span>
+          <span class="col-action"></span>
         </div>
         <div
           class="work-body"
@@ -252,27 +299,25 @@ onMounted(init)
             :key="i"
             class="drag-row"
             :data-index="i"
-            :draggable="!isReadonly()"
+            draggable="true"
             @dragstart="e => onDragStart(e, i)"
           >
             <span class="col-seq">
-              <span v-if="!isReadonly()" class="drag-handle">⠿</span>
+              <span class="drag-handle">⠿</span>
               <span>{{ i + 1 }}</span>
             </span>
             <el-input
               v-model="row.item"
               class="col-item"
-              :disabled="isReadonly()"
-              placeholder="事项（30字以内）"
+                            placeholder="事项（30字以内）"
               maxlength="30"
             />
             <el-input
               v-model="row.progress"
               class="col-progress"
-              :disabled="isReadonly()"
-              placeholder="进展情况"
+                            placeholder="进展情况"
             />
-            <span v-if="!isReadonly()" class="col-action">
+            <span class="col-action">
               <el-button
                 v-if="doneItems.length > 1"
                 :icon="Delete"
@@ -290,14 +335,14 @@ onMounted(init)
     <div class="section">
       <div class="section-header">
         <h3>下周工作计划</h3>
-        <el-button v-if="!isReadonly()" :icon="Plus" size="small" @click="addItem(planItems)">添加</el-button>
+        <el-button :icon="Plus" size="small" @click="addItem(planItems)">添加</el-button>
       </div>
       <div class="work-table">
         <div class="work-header">
           <span class="col-seq">序号</span>
           <span class="col-item">事项</span>
           <span class="col-progress">进展情况</span>
-          <span v-if="!isReadonly()" class="col-action"></span>
+          <span class="col-action"></span>
         </div>
         <div
           class="work-body"
@@ -309,27 +354,25 @@ onMounted(init)
             :key="i"
             class="drag-row"
             :data-index="i"
-            :draggable="!isReadonly()"
+            draggable="true"
             @dragstart="e => onDragStart(e, i)"
           >
             <span class="col-seq">
-              <span v-if="!isReadonly()" class="drag-handle">⠿</span>
+              <span class="drag-handle">⠿</span>
               <span>{{ i + 1 }}</span>
             </span>
             <el-input
               v-model="row.item"
               class="col-item"
-              :disabled="isReadonly()"
-              placeholder="事项（30字以内）"
+                            placeholder="事项（30字以内）"
               maxlength="30"
             />
             <el-input
               v-model="row.progress"
               class="col-progress"
-              :disabled="isReadonly()"
-              placeholder="进展情况"
+                            placeholder="进展情况"
             />
-            <span v-if="!isReadonly()" class="col-action">
+            <span class="col-action">
               <el-button
                 v-if="planItems.length > 1"
                 :icon="Delete"
@@ -350,8 +393,7 @@ onMounted(init)
         v-model="problems"
         type="textarea"
         :rows="3"
-        :disabled="isReadonly()"
-        placeholder="需要协调的事项或遇到的困难（选填）"
+                placeholder="需要协调的事项或遇到的困难（选填）"
         maxlength="500"
         show-word-limit
       />
@@ -363,17 +405,81 @@ onMounted(init)
         v-model="supportNeeded"
         type="textarea"
         :rows="3"
-        :disabled="isReadonly()"
-        placeholder="需要上级或跨组协调的事项（选填）"
+                placeholder="需要上级或跨组协调的事项（选填）"
         maxlength="500"
         show-word-limit
       />
     </div>
 
-    <div class="actions" v-if="!isReadonly()">
+    <div class="actions">
       <el-button @click="handleSave" :loading="loading">保存草稿</el-button>
       <el-button type="primary" @click="handleSmartDraft">智能初稿</el-button>
-      <el-button type="success" @click="handleSubmit" :loading="loading">提交审批</el-button>
+      <el-button type="success" @click="handleSubmit" :loading="loading">{{ isDraft() ? '提交周报' : '重新提交' }}</el-button>
+    </div>
+
+    <!-- Personal history -->
+    <div class="history-section" v-if="historyData.length > 0">
+      <h3 class="history-heading">我的历史周报</h3>
+      <el-table :data="historyData" v-loading="historyLoading" size="small" stripe>
+        <el-table-column label="周期" width="200">
+          <template #default="{ row }">
+            {{ formatHistoryDate(row.weekStartDate) }} ~ {{ formatHistoryDate(row.weekEndDate) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="版本" width="60" align="center">
+          <template #default="{ row }">V{{ row.version || 1 }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="historyStatusTypes[row.status] || 'info'" size="small">
+              {{ historyStatusLabels[row.status] || row.status }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="提交时间" width="160">
+          <template #default="{ row }">{{ formatHistoryDateTime(row.submittedAt) }}</template>
+        </el-table-column>
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="history-expand">
+              <div v-if="row.doneWork" class="expand-section">
+                <h4>本周完成工作：</h4>
+                <table class="work-table" v-if="historyRenderItems(row.doneWork).length">
+                  <thead><tr><th style="width:40px">序号</th><th style="width:200px">事项</th><th>进展情况</th></tr></thead>
+                  <tbody>
+                    <tr v-for="(it, i) in historyRenderItems(row.doneWork)" :key="i">
+                      <td style="text-align:center">{{ i + 1 }}</td>
+                      <td>{{ it.item }}</td>
+                      <td>{{ it.progress || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-if="row.planWork" class="expand-section">
+                <h4>下周工作计划：</h4>
+                <table class="work-table" v-if="historyRenderItems(row.planWork).length">
+                  <thead><tr><th style="width:40px">序号</th><th style="width:200px">事项</th><th>进展情况</th></tr></thead>
+                  <tbody>
+                    <tr v-for="(it, i) in historyRenderItems(row.planWork)" :key="i">
+                      <td style="text-align:center">{{ i + 1 }}</td>
+                      <td>{{ it.item }}</td>
+                      <td>{{ it.progress || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-if="row.problems" class="expand-section">
+                <h4>遇到的问题：</h4>
+                <p>{{ row.problems }}</p>
+              </div>
+              <div v-if="row.supportNeeded" class="expand-section">
+                <h4>需要支持：</h4>
+                <p>{{ row.supportNeeded }}</p>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
   </div>
 </template>
@@ -390,6 +496,17 @@ onMounted(init)
 }
 .status-bar {
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.version-badge {
+  font-size: 12px;
+  color: #909399;
+  background: #f0f2f5;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
 }
 .section {
   margin-bottom: 20px;
@@ -483,5 +600,58 @@ onMounted(init)
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid #ebeef5;
+}
+
+.history-section {
+  margin-top: 32px;
+  border-top: 2px solid #e4e7ed;
+  padding-top: 20px;
+}
+
+.history-heading {
+  font-size: 15px;
+  color: #303133;
+  margin: 0 0 12px 0;
+}
+
+.history-expand {
+  padding: 8px 20px;
+  background: #f7f8fa;
+  font-size: 13px;
+}
+
+.expand-section h4 {
+  margin: 8px 0 4px 0;
+  font-size: 13px;
+}
+
+.expand-section:first-child h4 {
+  margin-top: 0;
+}
+
+.expand-section p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.expand-section .work-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.expand-section .work-table th,
+.expand-section .work-table td {
+  border: 1px solid #e4e7ed;
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.expand-section .work-table th {
+  background: #f5f7fa;
+  font-weight: 600;
+  color: #606266;
 }
 </style>

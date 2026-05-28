@@ -16,5 +16,6 @@ public record RewardPunishmentRequest(
     @NotNull LocalDate decisionDate,
     String documentNo,
     String attachmentUrl,
+    String attachmentFileName,
     @NotNull Integer score
 ) {}

@@ -32,11 +32,19 @@ function formatDate(d) {
   if (typeof d === 'string') return d.split('T')[0]
   return d
 }
+function formatDeadline(d) {
+  if (!d) return '-'
+  const s = typeof d === 'string' ? d : String(d)
+  if (s.includes('2099-12-31')) return '长期工作'
+  return s.split('T')[0]
+}
 
 const queryParams = computed(() => {
   const p = { status: filterStatus.value }
-  if (filterOwner.value === 'all') {
-    p.ownerId = null
+  if (filterOwner.value === 'mine') {
+    p.ownerId = userStore.user?.id
+  } else {
+    p.ownerId = -1
   }
   return p
 })
@@ -90,7 +98,7 @@ onMounted(() => {
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2>问题解决实施</h2>
+      <h2>系统问题实施</h2>
     </div>
 
     <!-- 筛选栏 -->
@@ -121,7 +129,7 @@ onMounted(() => {
       <el-table-column prop="systemName" label="涉及系统" min-width="110" />
       <el-table-column prop="systemOwnerName" label="系统负责人" min-width="90" />
       <el-table-column prop="permanentDeadline" label="永久解决时限" min-width="110">
-        <template #default="{ row }">{{ formatDate(row.permanentDeadline) }}</template>
+        <template #default="{ row }">{{ formatDeadline(row.permanentDeadline) }}</template>
       </el-table-column>
       <el-table-column label="完成状态" min-width="100">
         <template #default="{ row }">
@@ -166,7 +174,7 @@ onMounted(() => {
           <span class="ni-label">永久解决方案：</span>{{ currentRow.permanentSolution }}
         </div>
         <div v-if="currentRow.permanentDeadline" class="ni-row">
-          <span class="ni-label">永久解决时限：</span>{{ formatDate(currentRow.permanentDeadline) }}
+          <span class="ni-label">永久解决时限：</span>{{ formatDeadline(currentRow.permanentDeadline) }}
         </div>
         <div v-if="currentRow.rootCause" class="ni-row">
           <span class="ni-label">产生原因：</span>{{ currentRow.rootCause }}

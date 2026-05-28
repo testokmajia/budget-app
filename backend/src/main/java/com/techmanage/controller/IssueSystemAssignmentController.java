@@ -39,8 +39,7 @@ public class IssueSystemAssignmentController {
         User u = currentUser(auth);
         boolean isAdmin = u.getRoles().stream().anyMatch(r -> r.getCode().equals("ROLE_ADMIN"));
         boolean isIssueAdmin = u.getRoles().stream().anyMatch(r -> r.getCode().equals("ROLE_ISSUE_ADMIN"));
-        // 默认查询当前用户
-        Long filterOwnerId = ownerId != null ? ownerId : u.getId();
+        Long filterOwnerId = ownerId != null && ownerId == -1L ? null : (ownerId != null ? ownerId : u.getId());
         return ApiResponse.ok(issueService.listPending(u.getId(), isAdmin, isIssueAdmin, status, filterOwnerId));
     }
 

@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class WeeklyReportServiceImpl implements WeeklyReportService {
@@ -38,7 +39,7 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
     public WeeklyReportResponse getCurrentWeek(Long userId) {
         LocalDate monday = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate friday = monday.plusDays(4);
-        var existing = weeklyReportRepository.findByUserIdAndWeekStartDate(userId, monday);
+        var existing = weeklyReportRepository.findLatestByUserIdAndWeekStartDate(userId, monday);
         if (existing.isPresent()) {
             return toResponse(existing.get());
         }
@@ -51,13 +52,23 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
 
     @Override
     public WeeklyReportResponse save(Long userId, WeeklyReportRequest request) {
-        var existing = weeklyReportRepository.findByUserIdAndWeekStartDate(userId, request.weekStartDate());
+        var existing = weeklyReportRepository.findLatestByUserIdAndWeekStartDate(userId, request.weekStartDate());
         WeeklyReport report;
         if (existing.isPresent()) {
             report = existing.get();
-            if (!"DRAFT".equals(report.getStatus()) && !"REJECTED".equals(report.getStatus())) {
-                throw new RuntimeException("当前状态的周报不可编辑");
+            if ("DRAFT".equals(report.getStatus())) {
+                report.setDoneWork(request.doneWork());
+                report.setPlanWork(request.planWork());
+                report.setProblems(request.problems());
+                report.setSupportNeeded(request.supportNeeded());
+                weeklyReportRepository.save(report);
+                return toResponse(report);
             }
+            report = new WeeklyReport();
+            report.setUserId(userId);
+            report.setWeekStartDate(request.weekStartDate());
+            report.setWeekEndDate(request.weekEndDate());
+            report.setVersion(existing.get().getVersion() + 1);
         } else {
             report = new WeeklyReport();
             report.setUserId(userId);
@@ -75,13 +86,28 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
 
     @Override
     public WeeklyReportResponse submit(Long userId, WeeklyReportRequest request) {
-        var existing = weeklyReportRepository.findByUserIdAndWeekStartDate(userId, request.weekStartDate());
+        var existing = weeklyReportRepository.findLatestByUserIdAndWeekStartDate(userId, request.weekStartDate());
         WeeklyReport report;
         if (existing.isPresent()) {
-            report = existing.get();
-            if (!"DRAFT".equals(report.getStatus()) && !"REJECTED".equals(report.getStatus())) {
-                throw new RuntimeException("当前状态的周报不可提交");
+            var prev = existing.get();
+            if ("DRAFT".equals(prev.getStatus())) {
+                prev.setDoneWork(request.doneWork());
+                prev.setPlanWork(request.planWork());
+                prev.setProblems(request.problems());
+                prev.setSupportNeeded(request.supportNeeded());
+                prev.setStatus("SUBMITTED");
+                prev.setSubmittedAt(LocalDateTime.now());
+                prev.setReviewComment(null);
+                prev.setReviewerId(null);
+                prev.setReviewedAt(null);
+                weeklyReportRepository.save(prev);
+                return toResponse(prev);
             }
+            report = new WeeklyReport();
+            report.setUserId(userId);
+            report.setWeekStartDate(request.weekStartDate());
+            report.setWeekEndDate(request.weekEndDate());
+            report.setVersion(prev.getVersion() + 1);
         } else {
             report = new WeeklyReport();
             report.setUserId(userId);
@@ -92,11 +118,8 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
         report.setPlanWork(request.planWork());
         report.setProblems(request.problems());
         report.setSupportNeeded(request.supportNeeded());
-        report.setStatus("PENDING_REVIEW");
+        report.setStatus("SUBMITTED");
         report.setSubmittedAt(LocalDateTime.now());
-        report.setReviewComment(null);
-        report.setReviewerId(null);
-        report.setReviewedAt(null);
         weeklyReportRepository.save(report);
         return toResponse(report);
     }
@@ -104,7 +127,7 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
     @Override
     public SmartDraftResponse getSmartDraft(Long userId) {
         LocalDate lastMonday = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1);
-        var lastWeek = weeklyReportRepository.findByUserIdAndWeekStartDate(userId, lastMonday);
+        var lastWeek = weeklyReportRepository.findLatestByUserIdAndWeekStartDate(userId, lastMonday);
         if (lastWeek.isPresent() && lastWeek.get().getPlanWork() != null) {
             String planWork = lastWeek.get().getPlanWork();
             return new SmartDraftResponse(planWork, planWork, true);
@@ -114,7 +137,8 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
 
     @Override
     public List<WeeklyReportResponse> listMyReports(Long userId, LocalDate from, LocalDate to) {
-        return weeklyReportRepository.findByUserIdAndDateRange(userId, from, to).stream()
+        var all = weeklyReportRepository.findByUserIdAndDateRange(userId, from, to);
+        return latestPerWeek(all).stream()
             .map(this::toResponse)
             .toList();
     }
@@ -123,7 +147,8 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
     public List<WeeklyReportResponse> listPendingForLeader(Long leaderUserId) {
         List<Long> memberIds = resolveTeamMemberIds(leaderUserId);
         if (memberIds.isEmpty()) return List.of();
-        return weeklyReportRepository.findPendingByUserIds(memberIds).stream()
+        var all = weeklyReportRepository.findSubmittedByUserIds(memberIds);
+        return latestPerWeek(all).stream()
             .map(this::toResponse)
             .toList();
     }
@@ -132,14 +157,14 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
     public long countPendingForLeader(Long leaderUserId) {
         List<Long> memberIds = resolveTeamMemberIds(leaderUserId);
         if (memberIds.isEmpty()) return 0;
-        return weeklyReportRepository.countPendingByUserIds(memberIds);
+        return weeklyReportRepository.countSubmittedByUserIds(memberIds);
     }
 
     @Override
     public WeeklyReportResponse approve(Long reportId, Long leaderUserId, ReviewRequest request) {
         var report = weeklyReportRepository.findById(reportId)
             .orElseThrow(() -> new RuntimeException("周报不存在"));
-        if (!"PENDING_REVIEW".equals(report.getStatus())) {
+        if (!"SUBMITTED".equals(report.getStatus())) {
             throw new RuntimeException("当前状态不可审批");
         }
         List<Long> memberIds = resolveTeamMemberIds(leaderUserId);
@@ -158,7 +183,7 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
     public WeeklyReportResponse reject(Long reportId, Long leaderUserId, ReviewRequest request) {
         var report = weeklyReportRepository.findById(reportId)
             .orElseThrow(() -> new RuntimeException("周报不存在"));
-        if (!"PENDING_REVIEW".equals(report.getStatus())) {
+        if (!"SUBMITTED".equals(report.getStatus())) {
             throw new RuntimeException("当前状态不可审批");
         }
         List<Long> memberIds = resolveTeamMemberIds(leaderUserId);
@@ -180,16 +205,32 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
     public List<WeeklyReportResponse> listTeamHistory(Long leaderUserId, LocalDate from, LocalDate to) {
         List<Long> memberIds = resolveTeamMemberIds(leaderUserId);
         if (memberIds.isEmpty()) return List.of();
-        return weeklyReportRepository.findByDateRange(from, to).stream()
+        var all = weeklyReportRepository.findByDateRange(from, to).stream()
             .filter(r -> memberIds.contains(r.getUserId()))
+            .toList();
+        return latestPerWeek(all).stream()
             .map(this::toResponse)
             .toList();
     }
 
     @Override
     public List<WeeklyReportResponse> listAllHistory(LocalDate from, LocalDate to) {
-        return weeklyReportRepository.findByDateRange(from, to).stream()
+        var all = weeklyReportRepository.findByDateRange(from, to);
+        return latestPerWeek(all).stream()
             .map(this::toResponse)
+            .toList();
+    }
+
+    private List<WeeklyReport> latestPerWeek(List<WeeklyReport> reports) {
+        return reports.stream()
+            .collect(Collectors.groupingBy(
+                r -> r.getUserId() + "_" + r.getWeekStartDate(),
+                Collectors.maxBy(Comparator.comparingInt(r -> r.getVersion() != null ? r.getVersion() : 1))
+            ))
+            .values().stream()
+            .filter(Optional::isPresent)
+            .map(Optional::get)
+            .sorted(Comparator.comparing(WeeklyReport::getWeekStartDate).reversed())
             .toList();
     }
 
@@ -234,6 +275,7 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
             r.getStatus(), r.getReviewComment(),
             r.getSubmittedAt(), r.getReviewedAt(),
             reviewerName, r.isMerged(),
+            r.getVersion(),
             r.getCreatedAt(), r.getUpdatedAt()
         );
     }

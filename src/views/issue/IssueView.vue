@@ -143,6 +143,7 @@ const solutionForm = reactive({
   rootCause: '',
   permanentSolution: '',
   permanentDeadline: '',
+  permanentLongTerm: false,
 })
 const solutionIssue = ref(null)
 const solutionRules = {
@@ -183,6 +184,7 @@ const editForm = reactive({
   rootCause: '',
   permanentSolution: '',
   permanentDeadline: '',
+  permanentLongTerm: false,
   status: '',
   system: '',
   submitterId: null,
@@ -203,6 +205,7 @@ const workflowReviewId = ref(null)
 const workflowReviewType = ref('leader') // 'leader' or 'admin'
 const workflowReviewComment = ref('')
 const workflowReviewing = ref(false)
+const workflowReviewRow = ref(null)
 
 // === Change proposal ===
 const changeProposalVisible = ref(false)
@@ -214,6 +217,7 @@ const changeProposalForm = reactive({
   rootCause: '',
   permanentSolution: '',
   permanentDeadline: '',
+  permanentLongTerm: false,
 })
 const changeProposalRules = {
   temporarySolution: [{ required: true, message: '请输入临时整改方案', trigger: 'blur' }],
@@ -265,6 +269,7 @@ const editSolutionForm = reactive({
   rootCause: '',
   permanentSolution: '',
   permanentDeadline: '',
+  permanentLongTerm: false,
 })
 const savingSolution = ref(false)
 
@@ -282,7 +287,8 @@ function startEditSolution() {
     editSolutionForm.temporaryDeadline = d.temporaryDeadline || ''
     editSolutionForm.rootCause = d.rootCause || ''
     editSolutionForm.permanentSolution = d.permanentSolution || ''
-    editSolutionForm.permanentDeadline = d.permanentDeadline || ''
+    editSolutionForm.permanentDeadline = d.permanentDeadline && d.permanentDeadline !== '2099-12-31' ? d.permanentDeadline : ''
+    editSolutionForm.permanentLongTerm = d.permanentDeadline === '2099-12-31'
     editingSolution.value = true
     return
   }
@@ -292,7 +298,8 @@ function startEditSolution() {
   changeProposalForm.temporaryDeadline = d.temporaryDeadline || ''
   changeProposalForm.rootCause = d.rootCause || ''
   changeProposalForm.permanentSolution = d.permanentSolution || ''
-  changeProposalForm.permanentDeadline = d.permanentDeadline || ''
+  changeProposalForm.permanentDeadline = d.permanentDeadline && d.permanentDeadline !== '2099-12-31' ? d.permanentDeadline : ''
+  changeProposalForm.permanentLongTerm = d.permanentDeadline === '2099-12-31'
   changeProposalVisible.value = true
 }
 function cancelEditSolution() {
@@ -309,7 +316,9 @@ async function saveEditSolution() {
   }
   savingSolution.value = true
   try {
-    await submitSolution(detail.value.id, { ...editSolutionForm })
+    const data = { ...editSolutionForm, permanentDeadline: editSolutionForm.permanentLongTerm ? '2099-12-31' : editSolutionForm.permanentDeadline }
+    delete data.permanentLongTerm
+    await submitSolution(detail.value.id, data)
     ElMessage.success('方案已提交，等待组长审核')
     editingSolution.value = false
     const res = await getById(detail.value.id)
@@ -325,7 +334,9 @@ async function handleSubmitChangeProposal() {
   if (!valid) return
   submittingProposal.value = true
   try {
-    await submitChangeProposal(changeProposalId.value, { ...changeProposalForm })
+    const data = { ...changeProposalForm, permanentDeadline: changeProposalForm.permanentLongTerm ? '2099-12-31' : changeProposalForm.permanentDeadline }
+    delete data.permanentLongTerm
+    await submitChangeProposal(changeProposalId.value, data)
     ElMessage.success('变更申请已提交，请等待审批')
     changeProposalVisible.value = false
   } finally {
@@ -534,13 +545,16 @@ function handleSolution(row) {
   solutionForm.temporaryDeadline = row.temporaryDeadline || ''
   solutionForm.rootCause = row.rootCause || ''
   solutionForm.permanentSolution = row.permanentSolution || ''
-  solutionForm.permanentDeadline = row.permanentDeadline || ''
+  solutionForm.permanentDeadline = row.permanentDeadline && row.permanentDeadline !== '2099-12-31' ? row.permanentDeadline : ''
+  solutionForm.permanentLongTerm = row.permanentDeadline === '2099-12-31'
   solutionVisible.value = true
 }
 async function handleSolutionSubmit() {
   const valid = await solutionFormRef.value.validate().catch(() => null)
   if (!valid) return
-  await submitSolution(solutionId.value, { ...solutionForm })
+  const data = { ...solutionForm, permanentDeadline: solutionForm.permanentLongTerm ? '2099-12-31' : solutionForm.permanentDeadline }
+  delete data.permanentLongTerm
+  await submitSolution(solutionId.value, data)
   ElMessage.success('方案已提交，等待组长审核')
   solutionVisible.value = false
   fetchData()
@@ -555,12 +569,14 @@ function openLeaderReview(row) {
   workflowReviewId.value = row.id
   workflowReviewType.value = 'leader'
   workflowReviewComment.value = ''
+  workflowReviewRow.value = row
   workflowReviewVisible.value = true
 }
 function openAdminReview(row) {
   workflowReviewId.value = row.id
   workflowReviewType.value = 'admin'
   workflowReviewComment.value = ''
+  workflowReviewRow.value = row
   workflowReviewVisible.value = true
 }
 async function handleWorkflowReview(approved) {
@@ -597,9 +613,11 @@ async function handleConfirm(row, satisfied) {
 }
 
 // === Reject ===
+const rejectRow = ref(null)
 function handleReject(row) {
   rejectId.value = row.id
   rejectForm.reason = ''
+  rejectRow.value = row
   rejectVisible.value = true
 }
 async function handleRejectSubmit() {
@@ -640,7 +658,8 @@ function handleEdit(row) {
   editForm.temporaryDeadline = row.temporaryDeadline || ''
   editForm.rootCause = row.rootCause || ''
   editForm.permanentSolution = row.permanentSolution || ''
-  editForm.permanentDeadline = row.permanentDeadline || ''
+  editForm.permanentDeadline = row.permanentDeadline && row.permanentDeadline !== '2099-12-31' ? row.permanentDeadline : ''
+  editForm.permanentLongTerm = row.permanentDeadline === '2099-12-31'
   editForm.status = row.status || ''
   editForm.system = row.system || ''
   editForm.submitterId = row.submitterId || null
@@ -649,7 +668,9 @@ function handleEdit(row) {
 async function handleEditSubmit() {
   const valid = await editFormRef.value.validate().catch(() => null)
   if (!valid) return
-  await updateIssue(editId.value, { ...editForm })
+  const data = { ...editForm, permanentDeadline: editForm.permanentLongTerm ? '2099-12-31' : editForm.permanentDeadline }
+  delete data.permanentLongTerm
+  await updateIssue(editId.value, data)
   ElMessage.success('问题已更新')
   editVisible.value = false
   fetchData()
@@ -705,6 +726,7 @@ function formatDateTime(dt) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 function formatDate(d) { if (!d) return '-'; return d.split('T')[0] }
+function formatDeadline(d) { if (!d) return '-'; if (d === '2099-12-31' || String(d).includes('2099-12-31')) return '长期工作'; return String(d).split('T')[0] }
 function isResponsiblePerson(row) { return row.responsiblePersonId === userStore.user?.id }
 function isSubmitter(row) { return row.submitterId === userStore.user?.id }
 function isTeamLeaderForIssue(row) {
@@ -794,10 +816,6 @@ watch(() => createForm.submitterDepartment, () => {
 watch(() => editForm.submitterDepartment, () => {
   editForm.submitterId = null
 }, { flush: 'sync' })
-// 需求6: 责任团队变更时清空责任人
-watch(() => editForm.responsibleTeam, () => {
-  editForm.responsiblePersonId = null
-})
 
 onMounted(() => {
   document.addEventListener('click', onDocClick)
@@ -872,7 +890,7 @@ onUnmounted(() => {
         </template>
       </el-table-column>
       <el-table-column prop="permanentDeadline" label="永久时限" min-width="110" sortable="custom">
-        <template #default="{ row }">{{ formatDate(row.permanentDeadline) }}</template>
+        <template #default="{ row }">{{ formatDeadline(row.permanentDeadline) }}</template>
       </el-table-column>
       <el-table-column prop="status" label="状态" min-width="90" sortable="custom">
         <template #default="{ row }">
@@ -1015,6 +1033,8 @@ onUnmounted(() => {
         <div class="si-row"><span class="si-label">描述：</span>{{ solutionIssue.description }}</div>
         <div class="si-row"><span class="si-label">提出人：</span>{{ solutionIssue.submitterName }} / {{ solutionIssue.submitterDepartment }}</div>
         <div class="si-row"><span class="si-label">状态：</span><el-tag size="small">{{ solutionIssue.status }}</el-tag></div>
+        <div class="si-row"><span class="si-label">涉及系统：</span>{{ solutionIssue.system || '未指定' }}</div>
+        <div class="si-row"><span class="si-label">系统负责人：</span>{{ solutionIssue.responsiblePersonName || '未分配' }}</div>
       </div>
       <el-form ref="solutionFormRef" :model="solutionForm" :rules="solutionRules" label-width="110px">
         <el-form-item label="产生原因" prop="rootCause" label-position="top">
@@ -1034,7 +1054,10 @@ onUnmounted(() => {
               <el-input v-model="solutionForm.permanentSolution" type="textarea" :rows="8" maxlength="1000" show-word-limit />
             </el-form-item>
             <el-form-item label="永久解决时限" prop="permanentDeadline" label-position="top">
-              <el-date-picker v-model="solutionForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+              <div style="display: flex; align-items: center; gap: 8px">
+                <el-date-picker v-model="solutionForm.permanentDeadline" type="date" placeholder="选择日期" style="flex: 1" value-format="YYYY-MM-DD" :disabled="solutionForm.permanentLongTerm" />
+                <el-checkbox v-model="solutionForm.permanentLongTerm">长期工作</el-checkbox>
+              </div>
             </el-form-item>
           </div>
         </div>
@@ -1046,7 +1069,34 @@ onUnmounted(() => {
     </el-dialog>
 
     <!-- Reject dialog -->
-    <el-dialog v-model="rejectVisible" title="驳回问题" width="480px">
+    <el-dialog v-model="rejectVisible" title="驳回问题" width="650px">
+      <template v-if="rejectRow">
+        <div class="review-issue-info">
+          <div class="review-issue-header">
+            <span class="review-issue-code">{{ rejectRow.issueCode }}</span>
+            <el-tag :type="getStatusType(rejectRow.status)" size="small">{{ rejectRow.status }}</el-tag>
+          </div>
+          <h4 class="review-issue-title">{{ rejectRow.title }}</h4>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="提出人">{{ rejectRow.submitterName }}</el-descriptions-item>
+            <el-descriptions-item label="提出部门">{{ rejectRow.submitterDepartment }}</el-descriptions-item>
+            <el-descriptions-item label="责任团队">{{ rejectRow.responsibleTeam || '未分配' }}</el-descriptions-item>
+            <el-descriptions-item label="责任人">{{ rejectRow.responsiblePersonName || '未分配' }}</el-descriptions-item>
+            <el-descriptions-item label="涉及系统">{{ rejectRow.system || '未指定' }}</el-descriptions-item>
+            <el-descriptions-item label="问题类型">{{ rejectRow.issueType || '-' }}</el-descriptions-item>
+            <el-descriptions-item v-if="rejectRow.description" label="问题详情" :span="2">
+              <div class="long-text">{{ rejectRow.description }}</div>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="rejectRow.temporarySolution" label="临时整改方案" :span="2">
+              <div class="long-text">{{ rejectRow.temporarySolution }}</div>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="rejectRow.permanentSolution" label="永久解决方案" :span="2">
+              <div class="long-text">{{ rejectRow.permanentSolution }}</div>
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+        <el-divider />
+      </template>
       <el-form ref="rejectFormRef" :model="rejectForm" :rules="rejectRules" label-width="100px">
         <el-form-item label="驳回原因" prop="reason">
           <el-input v-model="rejectForm.reason" type="textarea" :rows="3" maxlength="500" show-word-limit />
@@ -1072,7 +1122,34 @@ onUnmounted(() => {
     </el-dialog>
 
     <!-- Workflow review dialog -->
-    <el-dialog v-model="workflowReviewVisible" :title="workflowReviewType === 'leader' ? '负责人审核' : '管理员审核'" width="500px">
+    <el-dialog v-model="workflowReviewVisible" :title="workflowReviewType === 'leader' ? '负责人审核' : '管理员审核'" width="700px">
+      <template v-if="workflowReviewRow">
+        <div class="review-issue-info">
+          <div class="review-issue-header">
+            <span class="review-issue-code">{{ workflowReviewRow.issueCode }}</span>
+            <el-tag :type="getStatusType(workflowReviewRow.status)" size="small">{{ workflowReviewRow.status }}</el-tag>
+          </div>
+          <h4 class="review-issue-title">{{ workflowReviewRow.title }}</h4>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="提出人">{{ workflowReviewRow.submitterName }}</el-descriptions-item>
+            <el-descriptions-item label="提出部门">{{ workflowReviewRow.submitterDepartment }}</el-descriptions-item>
+            <el-descriptions-item label="责任团队">{{ workflowReviewRow.responsibleTeam || '未分配' }}</el-descriptions-item>
+            <el-descriptions-item label="责任人">{{ workflowReviewRow.responsiblePersonName || '未分配' }}</el-descriptions-item>
+            <el-descriptions-item label="涉及系统">{{ workflowReviewRow.system || '未指定' }}</el-descriptions-item>
+            <el-descriptions-item label="问题类型">{{ workflowReviewRow.issueType || '-' }}</el-descriptions-item>
+            <el-descriptions-item v-if="workflowReviewRow.description" label="问题详情" :span="2">
+              <div class="long-text">{{ workflowReviewRow.description }}</div>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="workflowReviewRow.temporarySolution" label="临时整改方案" :span="2">
+              <div class="long-text">{{ workflowReviewRow.temporarySolution }}</div>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="workflowReviewRow.permanentSolution" label="永久解决方案" :span="2">
+              <div class="long-text">{{ workflowReviewRow.permanentSolution }}</div>
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+        <el-divider />
+      </template>
       <el-form label-width="80px">
         <el-form-item label="审核意见">
           <el-input v-model="workflowReviewComment" type="textarea" :rows="3" placeholder="可选填写审核意见" />
@@ -1157,7 +1234,7 @@ onUnmounted(() => {
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="责任团队">
-              <el-select v-model="editForm.responsibleTeam" style="width: 100%" clearable @change="editForm.system = ''">
+              <el-select v-model="editForm.responsibleTeam" style="width: 100%" clearable @change="editForm.system = ''; editForm.responsiblePersonId = null">
                 <el-option v-for="t in teams" :key="t.id" :label="t.name" :value="t.name" :disabled="!t.enabled" />
               </el-select>
             </el-form-item>
@@ -1200,7 +1277,10 @@ onUnmounted(() => {
               <el-input v-model="editForm.permanentSolution" type="textarea" :rows="2" maxlength="1000" show-word-limit />
             </el-form-item>
             <el-form-item label="永久解决时限">
-              <el-date-picker v-model="editForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+              <div style="display: flex; align-items: center; gap: 8px">
+                <el-date-picker v-model="editForm.permanentDeadline" type="date" placeholder="选择日期" style="flex: 1" value-format="YYYY-MM-DD" :disabled="editForm.permanentLongTerm" />
+                <el-checkbox v-model="editForm.permanentLongTerm">长期工作</el-checkbox>
+              </div>
             </el-form-item>
           </div>
         </div>
@@ -1233,7 +1313,10 @@ onUnmounted(() => {
               <el-input v-model="changeProposalForm.permanentSolution" type="textarea" :rows="3" maxlength="1000" show-word-limit />
             </el-form-item>
             <el-form-item label="永久解决时限">
-              <el-date-picker v-model="changeProposalForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+              <div style="display: flex; align-items: center; gap: 8px">
+                <el-date-picker v-model="changeProposalForm.permanentDeadline" type="date" placeholder="选择日期" style="flex: 1" value-format="YYYY-MM-DD" :disabled="changeProposalForm.permanentLongTerm" />
+                <el-checkbox v-model="changeProposalForm.permanentLongTerm">长期工作</el-checkbox>
+              </div>
             </el-form-item>
           </div>
         </div>
@@ -1368,7 +1451,10 @@ onUnmounted(() => {
                       </div>
                       <div>
                         <div style="color: #606266; font-size: 13px; margin-bottom: 4px;">永久解决时限</div>
-                        <el-date-picker v-model="editSolutionForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
+                        <div style="display: flex; align-items: center; gap: 8px">
+                          <el-date-picker v-model="editSolutionForm.permanentDeadline" type="date" placeholder="选择日期" style="flex: 1" value-format="YYYY-MM-DD" :disabled="editSolutionForm.permanentLongTerm" />
+                          <el-checkbox v-model="editSolutionForm.permanentLongTerm">长期工作</el-checkbox>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1391,7 +1477,7 @@ onUnmounted(() => {
                 <el-descriptions-item label="永久解决方案">
                   <div class="long-text">{{ detail.permanentSolution || '-' }}</div>
                 </el-descriptions-item>
-                <el-descriptions-item label="永久解决时限">{{ formatDate(detail.permanentDeadline) }}</el-descriptions-item>
+                <el-descriptions-item label="永久解决时限">{{ formatDeadline(detail.permanentDeadline) }}</el-descriptions-item>
               </template>
 
               <el-descriptions-item label="状态">
@@ -1507,6 +1593,26 @@ onUnmounted(() => {
 }
 .action-dropdown-item:hover {
   background: #f5f7fa;
+}
+.review-issue-info {
+  margin-bottom: 8px;
+}
+.review-issue-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.review-issue-code {
+  font-size: 14px;
+  font-weight: 600;
+  color: #409eff;
+  font-family: monospace;
+}
+.review-issue-title {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #303133;
 }
 .long-text {
   white-space: pre-wrap;

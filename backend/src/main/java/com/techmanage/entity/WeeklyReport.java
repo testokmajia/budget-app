@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "weekly_reports", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"userId", "weekStartDate"})
+    @UniqueConstraint(columnNames = {"userId", "weekStartDate", "version"})
 })
 public class WeeklyReport extends BaseEntity {
 
@@ -46,6 +46,9 @@ public class WeeklyReport extends BaseEntity {
     @Column(nullable = false)
     private boolean merged = false;
 
+    @Column(nullable = false)
+    private Integer version = 1;
+
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
     public LocalDate getWeekStartDate() { return weekStartDate; }
@@ -72,4 +75,6 @@ public class WeeklyReport extends BaseEntity {
     public void setReviewedAt(LocalDateTime reviewedAt) { this.reviewedAt = reviewedAt; }
     public boolean isMerged() { return merged; }
     public void setMerged(boolean merged) { this.merged = merged; }
+    public Integer getVersion() { return version; }
+    public void setVersion(Integer version) { this.version = version; }
 }

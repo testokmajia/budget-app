@@ -183,7 +183,7 @@ public class DepartmentReportServiceImpl implements DepartmentReportService {
             r.getProblems(), r.getSupportNeeded(),
             r.getStatus(), r.getReviewComment(),
             r.getSubmittedAt(), r.getReviewedAt(),
-            null, false, r.getCreatedAt(), r.getUpdatedAt()
+            null, false, r.getVersion(), r.getCreatedAt(), r.getUpdatedAt()
         );
     }
 

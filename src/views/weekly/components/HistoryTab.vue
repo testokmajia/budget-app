@@ -21,8 +21,8 @@ function formatDateTime(d) {
   return typeof d === 'string' ? d.replace('T', ' ') : d
 }
 
-const statusLabels = { 'DRAFT': '草稿', 'PENDING_REVIEW': '已提交', 'APPROVED': '已通过', 'REJECTED': '已驳回' }
-const statusTypes = { 'DRAFT': 'info', 'PENDING_REVIEW': 'warning', 'APPROVED': 'success', 'REJECTED': 'danger' }
+const statusLabels = { 'DRAFT': '草稿', 'SUBMITTED': '已提交', 'APPROVED': '已通过', 'REJECTED': '已驳回' }
+const statusTypes = { 'DRAFT': 'info', 'SUBMITTED': 'warning', 'APPROVED': 'success', 'REJECTED': 'danger' }
 
 async function fetchData() {
   loading.value = true
@@ -76,6 +76,9 @@ onMounted(fetchData)
         <template #default="{ row }">
           {{ formatDate(row.weekStartDate) }} ~ {{ formatDate(row.weekEndDate) }}
         </template>
+      </el-table-column>
+      <el-table-column label="版本" width="60" align="center">
+        <template #default="{ row }">V{{ row.version || 1 }}</template>
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">

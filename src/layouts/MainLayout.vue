@@ -31,7 +31,7 @@ const pageTitle = computed(() => {
     '/reward': '奖惩记录',
     '/issue': '科技问题管理',
     '/weekly': '工作周报',
-    '/pending': '问题解决实施',
+    '/pending': '系统问题实施',
     '/admin': '系统管理',
   }
   return map[route.path] || ''
@@ -112,10 +112,10 @@ onUnmounted(() => {
 
 const menuItems = [
   { path: '/dashboard', title: '首页', icon: HomeFilled },
+  { path: '/weekly', title: '工作周报', icon: Document },
   { path: '/checklist', title: '清单管理', icon: List },
   { path: '/reward', title: '奖惩记录', icon: Trophy },
   { path: '/issue', title: '科技问题管理', icon: Warning },
-  { path: '/weekly', title: '工作周报', icon: Document },
 ]
 
 const adminMenu = [
@@ -197,7 +197,7 @@ function handleLogout() {
         </el-menu-item>
         <el-menu-item v-if="showPending" index="/pending">
           <el-icon><Clock /></el-icon>
-          <span>问题解决实施</span>
+          <span>系统问题实施</span>
         </el-menu-item>
         <el-menu-item
           v-for="item in adminMenu"
@@ -233,7 +233,7 @@ function handleLogout() {
         </el-menu-item>
         <el-menu-item v-if="showPending" index="/pending" @click="navigate('/pending')">
           <el-icon><Clock /></el-icon>
-          <span>问题解决实施</span>
+          <span>系统问题实施</span>
         </el-menu-item>
         <el-menu-item
           v-for="item in adminMenu"

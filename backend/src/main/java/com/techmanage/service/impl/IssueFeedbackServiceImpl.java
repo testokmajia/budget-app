@@ -400,8 +400,8 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     @Override
     public IssueResponse feedbackToSubmitter(Long issueId, Long userId) {
         var issue = find(issueId);
-        if (!"待确认".equals(issue.getStatus())) {
-            throw new RuntimeException("当前状态不允许反馈，请等待所有系统负责人完成");
+        if (!"待确认".equals(issue.getStatus()) && !"解决中".equals(issue.getStatus())) {
+            throw new RuntimeException("当前状态不允许反馈");
         }
         saveUndoInfo(issue, userId);
         issue.setStatus("待确认");

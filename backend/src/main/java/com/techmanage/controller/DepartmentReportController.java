@@ -41,13 +41,13 @@ public class DepartmentReportController {
         return ApiResponse.ok(deptReportService.listDepartmentReports());
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:\\d+}")
     @PreAuthorize("hasAnyRole('ROLE_CLERK', 'ROLE_ADMIN')")
     public ApiResponse<DepartmentReportResponse> getById(@PathVariable Long id) {
         return ApiResponse.ok(deptReportService.getById(id));
     }
 
-    @PutMapping("/{id}")
+    @PutMapping("/{id:\\d+}")
     @PreAuthorize("hasAnyRole('ROLE_CLERK', 'ROLE_ADMIN')")
     public ApiResponse<DepartmentReportResponse> update(@PathVariable Long id,
                                                         Authentication auth,
@@ -56,7 +56,7 @@ public class DepartmentReportController {
         return ApiResponse.ok(deptReportService.update(id, userId, body.get("editedContent")));
     }
 
-    @PostMapping("/{id}/submit")
+    @PostMapping("/{id:\\d+}/submit")
     @PreAuthorize("hasAnyRole('ROLE_CLERK', 'ROLE_ADMIN')")
     public ApiResponse<DepartmentReportResponse> submit(@PathVariable Long id,
                                                         Authentication auth) {
@@ -64,7 +64,7 @@ public class DepartmentReportController {
         return ApiResponse.ok(deptReportService.submit(id, userId));
     }
 
-    @PostMapping("/{id}/finalize")
+    @PostMapping("/{id:\\d+}/finalize")
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     public ApiResponse<DepartmentReportResponse> finalize(@PathVariable Long id,
                                                           Authentication auth) {
@@ -72,7 +72,7 @@ public class DepartmentReportController {
         return ApiResponse.ok(deptReportService.finalize(id, userId));
     }
 
-    @GetMapping("/{id}/export/word")
+    @GetMapping("/{id:\\d+}/export/word")
     @PreAuthorize("hasAnyRole('ROLE_CLERK', 'ROLE_ADMIN')")
     public ResponseEntity<byte[]> exportWord(@PathVariable Long id) {
         byte[] content = deptReportService.exportWord(id);
@@ -83,7 +83,7 @@ public class DepartmentReportController {
             .body(content);
     }
 
-    @GetMapping("/{id}/export/html")
+    @GetMapping("/{id:\\d+}/export/html")
     @PreAuthorize("hasAnyRole('ROLE_CLERK', 'ROLE_ADMIN')")
     public ResponseEntity<String> exportHtml(@PathVariable Long id) {
         return ResponseEntity.ok()

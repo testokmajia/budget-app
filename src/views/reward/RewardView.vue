@@ -36,6 +36,7 @@ const form = reactive({
   decisionDate: '',
   score: null,
   attachmentUrl: '',
+  attachmentFileName: '',
 })
 const rules = {
   type: [{ required: true, message: '请选择类型', trigger: 'change' }],
@@ -82,6 +83,7 @@ function handleAdd() {
     decisionDate: '',
     score: null,
     attachmentUrl: '',
+    attachmentFileName: '',
   })
   dialogVisible.value = true
 }
@@ -98,6 +100,7 @@ function handleEdit(row) {
     decisionDate: row.decisionDate,
     score: row.score != null ? Math.abs(row.score) : null,
     attachmentUrl: row.attachmentUrl || '',
+    attachmentFileName: row.attachmentFileName || '',
   })
   dialogVisible.value = true
 }
@@ -114,6 +117,7 @@ async function handleUpload(options) {
   try {
     const res = await uploadFile(options.file)
     form.attachmentUrl = res.data.filePath
+    form.attachmentFileName = res.data.fileName
     ElMessage.success('上传成功')
   } catch {
     ElMessage.error('上传失败')
@@ -124,6 +128,7 @@ async function handleUpload(options) {
 
 function handleRemoveAttachment() {
   form.attachmentUrl = ''
+  form.attachmentFileName = ''
 }
 
 async function handleSubmit() {
@@ -160,6 +165,10 @@ function scoreColor(score) {
 function formatScore(score) {
   if (score == null) return '-'
   return score > 0 ? `+${score}` : `${score}`
+}
+function truncateFileName(name) {
+  if (!name) return '查看'
+  return name.length > 20 ? name.slice(0, 20) + '...' : name
 }
 
 async function loadDepartments() {
@@ -229,9 +238,9 @@ onMounted(() => {
       <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
       <el-table-column prop="department" label="部门" width="120" />
       <el-table-column prop="decisionDate" label="决定日期" width="110" />
-      <el-table-column label="附件" width="70">
+      <el-table-column label="附件" width="180">
         <template #default="{ row }">
-          <a v-if="row.attachmentUrl" :href="row.attachmentUrl" target="_blank">查看</a>
+          <a v-if="row.attachmentUrl" :href="row.attachmentUrl" target="_blank" class="attachment-link" :title="row.attachmentFileName || ''">{{ truncateFileName(row.attachmentFileName) }}</a>
           <span v-else style="color: #c0c4cc">-</span>
         </template>
       </el-table-column>
@@ -298,12 +307,11 @@ onMounted(() => {
         </el-row>
         <el-form-item label="附件">
           <div v-if="form.attachmentUrl" class="attachment-preview">
-            <span class="attachment-path">{{ form.attachmentUrl }}</span>
+            <a :href="form.attachmentUrl" target="_blank" class="attachment-name">{{ form.attachmentFileName || form.attachmentUrl }}</a>
             <el-button type="danger" link size="small" @click="handleRemoveAttachment">删除</el-button>
           </div>
           <el-upload
             v-else
-            :auto-upload="false"
             :show-file-list="false"
             :http-request="handleUpload"
             accept="*"
@@ -352,12 +360,19 @@ onMounted(() => {
   background: #f5f7fa;
   border-radius: 4px;
 }
-.attachment-path {
+.attachment-name {
   font-size: 13px;
   color: #409eff;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+}
+.attachment-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  max-width: 100%;
 }
 </style>

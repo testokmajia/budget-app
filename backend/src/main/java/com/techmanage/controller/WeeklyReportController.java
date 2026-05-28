@@ -72,7 +72,7 @@ public class WeeklyReportController {
         return ApiResponse.ok(weeklyReportService.countPendingForLeader(userId));
     }
 
-    @PostMapping("/{id}/approve")
+    @PostMapping("/{id:\\d+}/approve")
     public ApiResponse<WeeklyReportResponse> approve(@PathVariable Long id,
                                                      Authentication auth,
                                                      @RequestBody(required = false) ReviewRequest request) {
@@ -80,7 +80,7 @@ public class WeeklyReportController {
         return ApiResponse.ok(weeklyReportService.approve(id, userId, request != null ? request : new ReviewRequest(null)));
     }
 
-    @PostMapping("/{id}/reject")
+    @PostMapping("/{id:\\d+}/reject")
     public ApiResponse<WeeklyReportResponse> reject(@PathVariable Long id,
                                                     Authentication auth,
                                                     @Valid @RequestBody ReviewRequest request) {

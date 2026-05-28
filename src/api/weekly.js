@@ -6,10 +6,17 @@ export function submitReport(data) { return request.post('/weekly-reports/submit
 export function getMyReports(params) { return request.get('/weekly-reports/my', { params }) }
 export function getSmartDraft() { return request.get('/weekly-reports/smart-draft') }
 
-export function getPendingList() { return request.get('/weekly-reports/pending') }
-export function getPendingCount() { return request.get('/weekly-reports/pending/count') }
-export function approveReport(id, data) { return request.post(`/weekly-reports/${id}/approve`, data) }
-export function rejectReport(id, data) { return request.post(`/weekly-reports/${id}/reject`, data) }
+export function getSubmittedList() { return request.get('/weekly-reports/pending') }
+export function getSubmittedCount() { return request.get('/weekly-reports/pending/count') }
+
+// Team summaries
+export function mergeTeamSummary(data) { return request.post('/team-summaries/merge', data) }
+export function updateTeamSummary(id, data) { return request.put(`/team-summaries/${id}`, data) }
+export function submitTeamSummary(id) { return request.post(`/team-summaries/${id}/submit`) }
+export function getTeamSummary(id) { return request.get(`/team-summaries/${id}`) }
+export function listMyTeamSummaries() { return request.get('/team-summaries/my') }
+export function listTeamSummariesByWeek(weekStartDate) { return request.get('/team-summaries/by-week', { params: { weekStartDate } }) }
+export function getMyTeams() { return request.get('/team-summaries/my/teams') }
 export function getTeamHistory(params) { return request.get('/weekly-reports/team', { params }) }
 
 export function getAllHistory(params) { return request.get('/weekly-reports/all', { params }) }

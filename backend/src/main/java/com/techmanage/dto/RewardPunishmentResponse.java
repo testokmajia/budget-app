@@ -13,6 +13,7 @@ public record RewardPunishmentResponse(
     LocalDate decisionDate,
     String documentNo,
     String attachmentUrl,
+    String attachmentFileName,
     String creatorName,
     LocalDateTime createdAt,
     LocalDateTime updatedAt,

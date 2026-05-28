@@ -32,6 +32,9 @@ public class RewardPunishment extends BaseEntity {
     @Column(length = 500)
     private String attachmentUrl;
 
+    @Column(length = 500)
+    private String attachmentFileName;
+
     @Column(nullable = false)
     private Long creatorId;
 
@@ -55,6 +58,8 @@ public class RewardPunishment extends BaseEntity {
     public void setDocumentNo(String documentNo) { this.documentNo = documentNo; }
     public String getAttachmentUrl() { return attachmentUrl; }
     public void setAttachmentUrl(String attachmentUrl) { this.attachmentUrl = attachmentUrl; }
+    public String getAttachmentFileName() { return attachmentFileName; }
+    public void setAttachmentFileName(String attachmentFileName) { this.attachmentFileName = attachmentFileName; }
     public Long getCreatorId() { return creatorId; }
     public void setCreatorId(Long creatorId) { this.creatorId = creatorId; }
     public Integer getScore() { return score; }
