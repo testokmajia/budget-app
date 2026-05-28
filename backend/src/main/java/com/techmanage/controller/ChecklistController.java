@@ -25,7 +25,7 @@ public class ChecklistController {
     @GetMapping
     public ApiResponse<List<ChecklistResponse>> list(
             @AuthenticationPrincipal Long userId,
-            @RequestParam(required = false) String status,
+            @RequestParam(required = false) List<String> status,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String responsiblePerson,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
@@ -54,8 +54,9 @@ public class ChecklistController {
 
     @PutMapping("/{id}/complete")
     public ApiResponse<ChecklistResponse> complete(@PathVariable Long id,
-                                                   @AuthenticationPrincipal Long userId) {
-        return ApiResponse.ok(checklistService.complete(id, userId));
+                                                   @AuthenticationPrincipal Long userId,
+                                                   @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate actualDate) {
+        return ApiResponse.ok(checklistService.complete(id, userId, actualDate));
     }
 
     @DeleteMapping("/{id}")

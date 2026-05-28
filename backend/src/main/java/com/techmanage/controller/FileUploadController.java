@@ -4,6 +4,8 @@ import com.techmanage.common.ApiResponse;
 import com.techmanage.entity.Attachment;
 import com.techmanage.repository.AttachmentRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +13,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URLConnection;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -108,5 +114,42 @@ public class FileUploadController {
     public ApiResponse<Void> deleteAttachment(@PathVariable Long issueId, @PathVariable Long attId) {
         attachmentRepository.deleteByIssueIdAndId(issueId, attId);
         return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/attachments/{id}/download")
+    public ResponseEntity<Resource> download(@PathVariable Long id) {
+        var attachment = attachmentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("附件不存在"));
+        String fileName = attachment.getFileName();
+        String filePath = attachment.getFilePath();
+        if (filePath == null || filePath.isBlank()) {
+            throw new RuntimeException("文件路径为空");
+        }
+        // filePath is like "/uploads/uuid.ext"
+        String storedName = filePath.substring(filePath.lastIndexOf('/') + 1);
+        Path target = uploadDir.resolve(storedName).normalize();
+        Resource resource;
+        try {
+            resource = new UrlResource(target.toUri().toURL());
+        } catch (MalformedURLException e) {
+            throw new RuntimeException("文件路径无效", e);
+        }
+        if (!resource.exists()) {
+            throw new RuntimeException("文件不存在");
+        }
+        String contentType = attachment.getContentType();
+        if (contentType == null || contentType.isBlank()) {
+            contentType = URLConnection.guessContentTypeFromName(fileName);
+        }
+        if (contentType == null) {
+            contentType = "application/octet-stream";
+        }
+        String encodedName = URLEncoder.encode(fileName, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + encodedName + "\"; filename*=UTF-8''" + encodedName)
+                .body(resource);
     }
 }

@@ -23,7 +23,7 @@ const routes = [
         path: 'checklist',
         name: 'Checklist',
         component: () => import('@/views/checklist/ChecklistView.vue'),
-        meta: { title: '清单管理' },
+        meta: { title: '清单革命' },
       },
       {
         path: 'reward',

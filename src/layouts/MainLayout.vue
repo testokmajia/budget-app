@@ -27,7 +27,7 @@ const pendingTasks = ref([])
 const pageTitle = computed(() => {
   const map = {
     '/dashboard': '首页',
-    '/checklist': '清单管理',
+    '/checklist': '清单革命',
     '/reward': '奖惩记录',
     '/issue': '科技问题管理',
     '/weekly': '工作周报',
@@ -113,7 +113,7 @@ onUnmounted(() => {
 const menuItems = [
   { path: '/dashboard', title: '首页', icon: HomeFilled },
   { path: '/weekly', title: '工作周报', icon: Document },
-  { path: '/checklist', title: '清单管理', icon: List },
+  { path: '/checklist', title: '清单革命', icon: List },
   { path: '/reward', title: '奖惩记录', icon: Trophy },
   { path: '/issue', title: '科技问题管理', icon: Warning },
 ]
@@ -186,9 +186,9 @@ function handleLogout() {
       <el-menu
         :default-active="route.path"
         router
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409EFF"
+        background-color="#001529"
+        text-color="rgba(255,255,255,0.65)"
+        active-text-color="#fff"
         :collapse="sidebarWidth < 160"
       >
         <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
@@ -223,9 +223,9 @@ function handleLogout() {
       <div class="logo">科技管理平台</div>
       <el-menu
         :default-active="route.path"
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409EFF"
+        background-color="#001529"
+        text-color="rgba(255,255,255,0.65)"
+        active-text-color="#fff"
       >
         <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path" @click="navigate(item.path)">
           <el-icon><component :is="item.icon" /></el-icon>
@@ -314,7 +314,7 @@ function handleLogout() {
 
 /* === Desktop sidebar === */
 .desktop-sidebar {
-  background-color: #304156;
+  background-color: #001529;
   overflow: hidden;
   position: relative;
   transition: none;
@@ -331,16 +331,36 @@ function handleLogout() {
   transition: background 0.15s;
 }
 .resize-handle:hover {
-  background: rgba(64, 158, 255, 0.4);
+  background: rgba(24, 144, 255, 0.4);
 }
 .logo {
-  height: 60px;
-  line-height: 60px;
+  height: 48px;
+  line-height: 48px;
   text-align: center;
   color: #fff;
-  font-size: 18px;
-  font-weight: bold;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  background: #002140;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.desktop-sidebar :deep(.el-menu) {
+  border-right: none;
+}
+.desktop-sidebar :deep(.el-menu-item) {
+  height: 44px;
+  line-height: 44px;
+  margin: 4px 8px;
+  border-radius: 6px;
+}
+.desktop-sidebar :deep(.el-menu-item.is-active) {
+  background-color: #1890ff !important;
+}
+.desktop-sidebar :deep(.el-menu-item:hover) {
+  background-color: rgba(255,255,255,0.08) !important;
+}
+.desktop-sidebar :deep(.el-menu-item.is-active:hover) {
+  background-color: #1890ff !important;
 }
 
 /* === Header === */
@@ -348,13 +368,16 @@ function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #e6e6e6;
-  padding: 0 16px;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 0 24px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  z-index: 10;
 }
 .header-left, .header-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .menu-toggle {
   display: none;
@@ -363,12 +386,12 @@ function handleLogout() {
   display: none;
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: rgba(0,0,0,0.85);
 }
 .page-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(0,0,0,0.65);
 }
 .header-badge {
   display: inline-flex;
@@ -376,35 +399,44 @@ function handleLogout() {
   gap: 3px;
   padding: 3px 10px;
   border-radius: 12px;
-  background: #ecf5ff;
-  color: #409eff;
+  background: #e6f7ff;
+  color: #1890ff;
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s;
   white-space: nowrap;
 }
 .header-badge:hover {
-  background: #d9ecff;
+  background: #bae7ff;
 }
 .header-badge strong {
   font-size: 13px;
 }
 .user-info {
   font-size: 14px;
-  color: #606266;
+  color: rgba(0,0,0,0.65);
 }
 .roles {
-  color: #909399;
+  color: rgba(0,0,0,0.45);
   font-size: 12px;
 }
 
 /* === Mobile drawer === */
 .mobile-drawer :deep(.el-drawer__body) {
   padding: 0;
-  background-color: #304156;
+  background-color: #001529;
 }
 .mobile-drawer .el-menu {
   border-right: none;
+}
+.mobile-drawer :deep(.el-menu-item) {
+  height: 44px;
+  line-height: 44px;
+  margin: 4px 8px;
+  border-radius: 6px;
+}
+.mobile-drawer :deep(.el-menu-item.is-active) {
+  background-color: #1890ff !important;
 }
 .drawer-footer {
   position: absolute;
@@ -429,6 +461,9 @@ function handleLogout() {
     display: none;
   }
   .roles {
+    display: none;
+  }
+  .page-title {
     display: none;
   }
 }

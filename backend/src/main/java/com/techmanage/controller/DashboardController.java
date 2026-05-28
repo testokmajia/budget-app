@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 public class DashboardController {
 
     private static final List<String> STATUS_ORDER = Arrays.asList(
-        "待分派", "待员工处理", "待组长审核", "待管理员审核", "待确认", "已完成", "已驳回", "已关闭"
+        "待分派", "待员工处理", "待组长审核", "待管理员审核", "解决中", "待确认", "已完成", "已驳回", "已关闭"
     );
 
     private final IssueFeedbackRepository issueRepository;

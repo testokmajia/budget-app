@@ -192,16 +192,21 @@ onUnmounted(() => {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #f0f2f5;
+  background-image: radial-gradient(ellipse at 50% 50%, rgba(24,144,255,0.06) 0%, transparent 70%);
 }
 .login-card {
   width: 400px;
   max-width: 90vw;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.04);
 }
 .login-card h2 {
   text-align: center;
   margin-bottom: 16px;
-  color: #303133;
+  color: rgba(0,0,0,0.85);
+  font-weight: 500;
+  font-size: 20px;
 }
 
 :deep(.login-tabs .el-tabs__nav-wrap::after) {

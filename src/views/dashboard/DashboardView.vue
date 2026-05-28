@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { getStats } from '@/api/dashboard'
+import { DataBoard, Clock, WarningFilled, CircleCheckFilled } from '@element-plus/icons-vue'
 
 const stats = ref(null)
 const loading = ref(true)
@@ -10,6 +11,7 @@ const statusColors = {
   '待员工处理': '#e6a23c',
   '待组长审核': '#409eff',
   '待管理员审核': '#409eff',
+  '解决中': '#1890ff',
   '待确认': '#e6a23c',
   '已完成': '#67c23a',
   '已驳回': '#f56c6c',
@@ -66,27 +68,30 @@ onMounted(async () => {
     <template v-if="stats">
       <!-- Stat cards -->
       <div class="stat-cards">
-        <div class="stat-card total">
-          <div class="stat-icon">
-            <span class="icon-circle">📋</span>
+        <div class="stat-card">
+          <div class="stat-accent blue"></div>
+          <div class="stat-icon-box blue">
+            <el-icon :size="22"><DataBoard /></el-icon>
           </div>
           <div class="stat-body">
             <div class="stat-value">{{ totalIssues }}</div>
             <div class="stat-label">问题总数</div>
           </div>
         </div>
-        <div class="stat-card pending">
-          <div class="stat-icon">
-            <span class="icon-circle">⏳</span>
+        <div class="stat-card">
+          <div class="stat-accent orange"></div>
+          <div class="stat-icon-box orange">
+            <el-icon :size="22"><Clock /></el-icon>
           </div>
           <div class="stat-body">
             <div class="stat-value">{{ activeIssues }}</div>
             <div class="stat-label">处理中</div>
           </div>
         </div>
-        <div class="stat-card overdue">
-          <div class="stat-icon">
-            <span class="icon-circle">⚠️</span>
+        <div class="stat-card">
+          <div class="stat-accent red"></div>
+          <div class="stat-icon-box red">
+            <el-icon :size="22"><WarningFilled /></el-icon>
           </div>
           <div class="stat-body">
             <div class="stat-value">{{ stats.overdue.temporaryOverdue + stats.overdue.permanentOverdue }}</div>
@@ -96,9 +101,10 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-        <div class="stat-card completed">
-          <div class="stat-icon">
-            <span class="icon-circle">✅</span>
+        <div class="stat-card">
+          <div class="stat-accent green"></div>
+          <div class="stat-icon-box green">
+            <el-icon :size="22"><CircleCheckFilled /></el-icon>
           </div>
           <div class="stat-body">
             <div class="stat-value">{{ completedIssues }}</div>
@@ -251,45 +257,58 @@ onMounted(async () => {
   margin-bottom: 24px;
 }
 .stat-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 20px 24px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: var(--card-shadow);
   transition: box-shadow 0.2s;
+  overflow: hidden;
 }
 .stat-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: var(--card-shadow-hover);
 }
-.icon-circle {
+.stat-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+.stat-accent.blue  { background: #1890ff; }
+.stat-accent.orange { background: #fa8c16; }
+.stat-accent.red   { background: #f5222d; }
+.stat-accent.green { background: #52c41a; }
+.stat-icon-box {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 48px;
   height: 48px;
-  border-radius: 12px;
-  font-size: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
-.stat-card.total .icon-circle { background: #e8f3ff; }
-.stat-card.pending .icon-circle { background: #fff7e6; }
-.stat-card.overdue .icon-circle { background: #ffece8; }
-.stat-card.completed .icon-circle { background: #e8f8ee; }
+.stat-icon-box.blue  { background: #e6f7ff; color: #1890ff; }
+.stat-icon-box.orange { background: #fff7e6; color: #fa8c16; }
+.stat-icon-box.red   { background: #fff1f0; color: #f5222d; }
+.stat-icon-box.green { background: #f6ffed; color: #52c41a; }
 .stat-value {
   font-size: 28px;
-  font-weight: 700;
-  color: #1d2129;
+  font-weight: 600;
+  color: rgba(0,0,0,0.85);
   line-height: 1.2;
 }
 .stat-label {
   font-size: 13px;
-  color: #86909c;
+  color: rgba(0,0,0,0.45);
   margin-top: 2px;
 }
 .stat-sub {
   font-size: 11px;
-  color: #c9cdd4;
+  color: rgba(0,0,0,0.25);
   margin-top: 2px;
 }
 
@@ -299,16 +318,16 @@ onMounted(async () => {
 }
 .chart-card {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 6px;
   padding: 20px 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: var(--card-shadow);
   height: 100%;
 }
 .chart-title {
   margin: 0 0 16px;
   font-size: 15px;
-  font-weight: 600;
-  color: #1d2129;
+  font-weight: 500;
+  color: rgba(0,0,0,0.85);
 }
 
 /* Bar chart */
@@ -325,9 +344,10 @@ onMounted(async () => {
 .bar-label {
   width: 65px;
   font-size: 13px;
-  color: #4e5969;
+  color: rgba(0,0,0,0.65);
   text-align: right;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 .team-label {
   width: 80px;
@@ -335,24 +355,24 @@ onMounted(async () => {
 .bar-track {
   flex: 1;
   height: 20px;
-  background: #f2f3f5;
-  border-radius: 4px;
+  background: #f5f5f5;
+  border-radius: 10px;
   overflow: hidden;
 }
 .bar-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: 10px;
   transition: width 0.6s ease;
   min-width: 4px;
 }
 .team-fill {
-  background: #409eff;
+  background: #1890ff;
 }
 .bar-value {
   width: 36px;
   font-size: 13px;
   font-weight: 600;
-  color: #1d2129;
+  color: rgba(0,0,0,0.85);
   text-align: left;
   flex-shrink: 0;
 }
@@ -366,31 +386,31 @@ onMounted(async () => {
 .overdue-item {
   flex: 1;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: 6px;
   text-align: center;
 }
 .overdue-item.temp {
   background: #fff7e6;
 }
 .overdue-item.perm {
-  background: #ffece8;
+  background: #fff1f0;
 }
 .overdue-num {
   font-size: 32px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
 }
-.overdue-item.temp .overdue-num { color: #e6a23c; }
-.overdue-item.perm .overdue-num { color: #f56c6c; }
+.overdue-item.temp .overdue-num { color: #fa8c16; }
+.overdue-item.perm .overdue-num { color: #f5222d; }
 .overdue-desc {
   font-size: 13px;
   font-weight: 500;
-  color: #1d2129;
+  color: rgba(0,0,0,0.85);
   margin-top: 4px;
 }
 .overdue-hint {
   font-size: 11px;
-  color: #86909c;
+  color: rgba(0,0,0,0.45);
   margin-top: 2px;
 }
 .rate-header {
@@ -398,34 +418,34 @@ onMounted(async () => {
   justify-content: space-between;
   margin-bottom: 8px;
   font-size: 13px;
-  color: #4e5969;
+  color: rgba(0,0,0,0.65);
 }
 .rate-pct {
   font-weight: 600;
-  color: #1d2129;
+  color: rgba(0,0,0,0.85);
 }
 
 /* Personnel list */
 .personnel-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .personnel-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: #f7f8fa;
-  border-radius: 8px;
+  background: #fafafa;
+  border-radius: 6px;
   transition: background 0.15s;
 }
 .personnel-row:hover {
-  background: #e8f3ff;
+  background: #e6f7ff;
 }
 .personnel-team {
   font-size: 14px;
-  color: #1d2129;
+  color: rgba(0,0,0,0.85);
   font-weight: 500;
 }
 .personnel-count {
@@ -435,12 +455,12 @@ onMounted(async () => {
 }
 .personnel-num {
   font-size: 20px;
-  font-weight: 700;
-  color: #409eff;
+  font-weight: 600;
+  color: #1890ff;
 }
 .personnel-unit {
   font-size: 12px;
-  color: #86909c;
+  color: rgba(0,0,0,0.45);
 }
 .title-totals {
   font-weight: 400;
@@ -451,20 +471,20 @@ onMounted(async () => {
   align-items: center;
 }
 .title-tag {
-  background: #e8f3ff;
-  color: #409eff;
+  background: #e6f7ff;
+  color: #1890ff;
   padding: 2px 10px;
-  border-radius: 12px;
+  border-radius: 10px;
   font-size: 12px;
   font-weight: 500;
 }
 .title-tag.dept {
-  background: #f2f3f5;
-  color: #303133;
+  background: #f5f5f5;
+  color: rgba(0,0,0,0.65);
 }
 .empty-hint {
   text-align: center;
-  color: #c9cdd4;
+  color: rgba(0,0,0,0.25);
   padding: 32px 0;
   font-size: 14px;
 }
@@ -480,26 +500,26 @@ onMounted(async () => {
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  background: #f7f8fa;
-  border-radius: 8px;
+  background: #fafafa;
+  border-radius: 6px;
   transition: all 0.15s;
 }
 .ranking-item:hover {
-  background: #e8f3ff;
+  background: #e6f7ff;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  box-shadow: var(--card-shadow);
 }
 .ranking-item.top-1 {
-  background: linear-gradient(135deg, #fff9e6 0%, #fff3cc 100%);
-  border: 1px solid #f0d060;
+  background: linear-gradient(135deg, #fffbe6 0%, #fff1b8 100%);
+  border: 1px solid #ffe58f;
 }
 .ranking-item.top-2 {
-  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
-  border: 1px solid #c0c4cc;
+  background: linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%);
+  border: 1px solid #d9d9d9;
 }
 .ranking-item.top-3 {
-  background: linear-gradient(135deg, #fdf2ec 0%, #f9e0cc 100%);
-  border: 1px solid #e0b080;
+  background: linear-gradient(135deg, #fff7e6 0%, #ffe7ba 100%);
+  border: 1px solid #ffd591;
 }
 .ranking-pos {
   width: 28px;
@@ -512,7 +532,7 @@ onMounted(async () => {
 .pos-num {
   font-size: 13px;
   font-weight: 600;
-  color: #909399;
+  color: rgba(0,0,0,0.45);
 }
 .ranking-info {
   flex: 1;
@@ -521,23 +541,23 @@ onMounted(async () => {
 .ranking-name {
   font-size: 14px;
   font-weight: 600;
-  color: #1d2129;
+  color: rgba(0,0,0,0.85);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .ranking-dept {
   font-size: 11px;
-  color: #86909c;
+  color: rgba(0,0,0,0.45);
   margin-top: 1px;
 }
 .ranking-score {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   flex-shrink: 0;
 }
-.ranking-score.positive { color: #67c23a; }
-.ranking-score.negative { color: #f56c6c; }
+.ranking-score.positive { color: #52c41a; }
+.ranking-score.negative { color: #f5222d; }
 
 /* Responsive */
 @media (max-width: 768px) {

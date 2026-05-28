@@ -12,8 +12,9 @@ export function create(data) {
 export function update(id, data) {
   return request.put(`/checklists/${id}`, data)
 }
-export function complete(id) {
-  return request.put(`/checklists/${id}/complete`)
+export function complete(id, actualDate) {
+  const params = actualDate ? { actualDate } : {}
+  return request.put(`/checklists/${id}/complete`, null, { params })
 }
 export function remove(id) {
   return request.delete(`/checklists/${id}`)

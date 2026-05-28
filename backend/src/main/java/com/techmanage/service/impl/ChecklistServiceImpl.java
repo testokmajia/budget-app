@@ -25,10 +25,10 @@ public class ChecklistServiceImpl implements ChecklistService {
     }
 
     @Override
-    public List<ChecklistResponse> list(Long userId, String status, String keyword,
+    public List<ChecklistResponse> list(Long userId, List<String> status, String keyword,
                                          String responsiblePerson, LocalDate startDate, LocalDate endDate) {
         return checklistRepository.findByUserId(userId).stream()
-            .filter(c -> status == null || status.isEmpty() || status.equals(c.getStatus()))
+            .filter(c -> status == null || status.isEmpty() || status.contains(c.getStatus()))
             .filter(c -> keyword == null || keyword.isEmpty() || c.getDescription().contains(keyword))
             .filter(c -> responsiblePerson == null || responsiblePerson.isEmpty() ||
                          (c.getResponsiblePerson() != null && c.getResponsiblePerson().contains(responsiblePerson)))
@@ -69,11 +69,11 @@ public class ChecklistServiceImpl implements ChecklistService {
     }
 
     @Override
-    public ChecklistResponse complete(Long id, Long userId) {
+    public ChecklistResponse complete(Long id, Long userId, LocalDate actualDate) {
         var checklist = checklistRepository.findByIdAndUserId(id, userId)
             .orElseThrow(() -> new RuntimeException("清单不存在"));
         checklist.setStatus("已完成");
-        checklist.setActualDate(LocalDate.now());
+        checklist.setActualDate(actualDate != null ? actualDate : LocalDate.now());
         checklistRepository.save(checklist);
         return toResponse(checklist);
     }

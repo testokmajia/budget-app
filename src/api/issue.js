@@ -57,16 +57,20 @@ export function getIssueProposals(id) {
 // Attachments
 export function uploadAttachments(id, files) {
   const formData = new FormData()
-  files.forEach(f => formData.append('files', f))
-  return request.post(`/issues/${id}/attachments`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  files.forEach(f => {
+    const file = f.raw || f
+    formData.append('files', file)
   })
+  return request.post(`/issues/${id}/attachments`, formData)
 }
 export function getAttachments(id) {
   return request.get(`/issues/${id}/attachments`)
 }
 export function deleteAttachment(issueId, attId) {
   return request.delete(`/issues/${issueId}/attachments/${attId}`)
+}
+export function downloadAttachment(id) {
+  return request.get(`/attachments/${id}/download`, { responseType: 'blob' })
 }
 
 // Pending issues & system assignments

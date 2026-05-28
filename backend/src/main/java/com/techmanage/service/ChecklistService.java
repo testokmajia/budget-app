@@ -7,11 +7,11 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface ChecklistService {
-    List<ChecklistResponse> list(Long userId, String status, String keyword, String responsiblePerson,
+    List<ChecklistResponse> list(Long userId, List<String> status, String keyword, String responsiblePerson,
                                   LocalDate startDate, LocalDate endDate);
     ChecklistResponse getById(Long id, Long userId);
     ChecklistResponse create(Long userId, ChecklistRequest request);
     ChecklistResponse update(Long id, Long userId, ChecklistRequest request);
-    ChecklistResponse complete(Long id, Long userId);
+    ChecklistResponse complete(Long id, Long userId, LocalDate actualDate);
     void delete(Long id, Long userId);
 }

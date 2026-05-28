@@ -17,9 +17,12 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const isEdit = ref(false)
 const editId = ref(null)
+const completeDialogVisible = ref(false)
+const completingRow = ref(null)
+const completingDate = ref('')
 
 const searchForm = reactive({
-  status: '',
+  status: ['待办', '进行中'],
   keyword: '',
   responsiblePerson: '',
   startDate: '',
@@ -104,7 +107,7 @@ async function fetchData() {
   loading.value = true
   try {
     const params = {}
-    if (searchForm.status) params.status = searchForm.status
+    if (searchForm.status && searchForm.status.length > 0) params.status = searchForm.status
     if (searchForm.keyword) params.keyword = searchForm.keyword
     if (searchForm.responsiblePerson) params.responsiblePerson = searchForm.responsiblePerson
     if (searchForm.startDate) params.startDate = searchForm.startDate
@@ -166,14 +169,17 @@ function handleEdit(row) {
   dialogVisible.value = true
 }
 
-async function handleComplete(row) {
-  await ElMessageBox.confirm(
-    `确定将「${row.description.substring(0, 30)}」标记为已完成吗？`,
-    '提示',
-    { type: 'warning' }
-  )
-  await complete(row.id)
+function handleComplete(row) {
+  completingRow.value = row
+  completingDate.value = new Date().toISOString().split('T')[0]
+  completeDialogVisible.value = true
+}
+
+async function confirmComplete() {
+  await complete(completingRow.value.id, completingDate.value || null)
   ElMessage.success('已标记为完成')
+  completeDialogVisible.value = false
+  completingRow.value = null
   fetchData()
 }
 
@@ -223,7 +229,7 @@ onUnmounted(() => {
     </div>
 
     <div class="search-bar">
-      <el-select v-model="searchForm.status" placeholder="事项状态" clearable style="width: 120px" @change="fetchData">
+      <el-select v-model="searchForm.status" multiple placeholder="事项状态" clearable style="width: 200px" @change="fetchData">
         <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
       </el-select>
       <el-input v-model="searchForm.responsiblePerson" placeholder="责任人" clearable style="width: 120px" @input="fetchData" />
@@ -307,6 +313,26 @@ onUnmounted(() => {
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Complete date dialog -->
+    <el-dialog v-model="completeDialogVisible" title="完成确认" width="400px">
+      <p style="margin-bottom: 16px; color: #606266;">
+        将「<strong>{{ completingRow?.description?.substring(0, 30) }}</strong>」标记为已完成
+      </p>
+      <el-form-item label="实际完成日期">
+        <el-date-picker
+          v-model="completingDate"
+          type="date"
+          placeholder="选择日期"
+          value-format="YYYY-MM-DD"
+          style="width: 100%"
+        />
+      </el-form-item>
+      <template #footer>
+        <el-button @click="completeDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmComplete">确定完成</el-button>
       </template>
     </el-dialog>
 

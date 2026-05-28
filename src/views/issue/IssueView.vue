@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Download, ArrowDown, Edit, Share, UserFilled, DocumentAdd, Select, CircleCheck, CircleClose, CloseBold, Switch, MoreFilled, RefreshLeft } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { getList, getById, create, assign, submitSolution, reviewByLeader, reviewByAdmin, confirm, reject, closeIssue, updateIssue, exportIssues, submitChangeProposal, getPendingProposals, reviewProposal, undoIssue, uploadAttachments, getAttachments, deleteAttachment, getSystemAssignments, feedbackToSubmitter } from '@/api/issue'
+import { getList, getById, create, assign, submitSolution, reviewByLeader, reviewByAdmin, confirm, reject, closeIssue, updateIssue, exportIssues, submitChangeProposal, getPendingProposals, reviewProposal, undoIssue, uploadAttachments, getAttachments, deleteAttachment, downloadAttachment, getSystemAssignments, feedbackToSubmitter } from '@/api/issue'
 import { getUsers, getCategories, getDepartments, getTeams, getOccasions, getSystems } from '@/api/admin'
 
 const userStore = useUserStore()
@@ -60,7 +60,7 @@ const createForm = reactive({
   submitterDepartment: '',
   submitterId: null,
   occasionId: null,
-  meetingDepartment: '',
+  meetingDepartment: [],
   meetingDate: '',
   title: '',
   description: '',
@@ -174,7 +174,7 @@ const editForm = reactive({
   description: '',
   submitterDepartment: '',
   occasionId: null,
-  meetingDepartment: '',
+  meetingDepartment: [],
   meetingDate: '',
   issueType: '',
   responsibleTeam: '',
@@ -492,7 +492,7 @@ function handleCreate() {
   createForm.submitterDepartment = userStore.user?.department || ''
   createForm.submitterId = userStore.user?.id || null
   createForm.occasionId = null
-  createForm.meetingDepartment = ''
+  createForm.meetingDepartment = []
   createForm.meetingDate = ''
   createForm.title = ''
   createForm.description = ''
@@ -504,6 +504,7 @@ async function handleCreateSubmit() {
   const valid = await createFormRef.value.validate().catch(() => null)
   if (!valid) return
   const data = { ...createForm }
+  data.meetingDepartment = Array.isArray(data.meetingDepartment) ? data.meetingDepartment.join(',') : data.meetingDepartment
   if (!showMeetingFields.value) {
     data.meetingDepartment = ''
     data.meetingDate = ''
@@ -649,7 +650,7 @@ function handleEdit(row) {
   editForm.description = row.description || ''
   editForm.submitterDepartment = row.submitterDepartment || ''
   editForm.occasionId = row.occasionId || null
-  editForm.meetingDepartment = row.meetingDepartment || ''
+  editForm.meetingDepartment = row.meetingDepartment ? row.meetingDepartment.split(',').map(s => s.trim()).filter(Boolean) : []
   editForm.meetingDate = row.meetingDate || ''
   editForm.issueType = row.issueType || ''
   editForm.responsibleTeam = row.responsibleTeam || ''
@@ -669,6 +670,7 @@ async function handleEditSubmit() {
   const valid = await editFormRef.value.validate().catch(() => null)
   if (!valid) return
   const data = { ...editForm, permanentDeadline: editForm.permanentLongTerm ? '2099-12-31' : editForm.permanentDeadline }
+  data.meetingDepartment = Array.isArray(data.meetingDepartment) ? data.meetingDepartment.join(',') : data.meetingDepartment
   delete data.permanentLongTerm
   await updateIssue(editId.value, data)
   ElMessage.success('问题已更新')
@@ -702,6 +704,56 @@ async function handleExport() {
 // === Detail ===
 const detailAttachments = ref([])
 const detailSystemAssignments = ref([])
+
+// Attachment preview
+const previewVisible = ref(false)
+const previewLoading = ref(false)
+const previewFile = ref(null)
+function isPreviewableImage(type) {
+  return type && (type.startsWith('image/') || type === 'image/svg+xml')
+}
+function isPreviewablePdf(type) {
+  return type && type === 'application/pdf'
+}
+function isPreviewableText(type) {
+  return type && (type.startsWith('text/') || type === 'application/json' || type === 'application/xml')
+}
+function isPreviewableWord(type) {
+  return type && (type === 'application/msword' ||
+    type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    type === 'application/vnd.ms-excel' ||
+    type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    type === 'application/vnd.ms-powerpoint' ||
+    type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
+}
+async function previewAttachment(att) {
+  previewLoading.value = true
+  previewVisible.value = true
+  previewFile.value = { name: att.fileName, type: att.contentType, url: null, textContent: '' }
+  try {
+    const res = await downloadAttachment(att.id)
+    const blob = res instanceof Blob ? res : new Blob([res])
+    const url = URL.createObjectURL(blob)
+    if (isPreviewableText(att.contentType)) {
+      const text = await blob.text()
+      previewFile.value = { name: att.fileName, type: att.contentType, url, textContent: text }
+    } else {
+      previewFile.value = { name: att.fileName, type: att.contentType, url, textContent: '' }
+    }
+  } catch {
+    previewFile.value = { name: att.fileName, type: att.contentType, url: null, textContent: '', error: true }
+  } finally {
+    previewLoading.value = false
+  }
+}
+function closePreview() {
+  previewVisible.value = false
+  if (previewFile.value?.url) {
+    URL.revokeObjectURL(previewFile.value.url)
+  }
+  previewFile.value = null
+}
+
 async function handleDetail(row) {
   try {
     const res = await getById(row.id)
@@ -805,7 +857,7 @@ function getRowActions(row) {
 
 watch(() => createForm.occasionId, () => {
   if (!showMeetingFields.value) {
-    createForm.meetingDepartment = ''
+    createForm.meetingDepartment = []
     createForm.meetingDate = ''
   }
 })
@@ -955,7 +1007,9 @@ onUnmounted(() => {
         </el-form-item>
         <template v-if="showMeetingFields">
           <el-form-item label="会议参与部门">
-            <el-input v-model="createForm.meetingDepartment" placeholder="参与部门" />
+            <el-select v-model="createForm.meetingDepartment" multiple placeholder="请选择参与部门" style="width: 100%">
+                <el-option v-for="d in departments" :key="d.name" :label="d.name" :value="d.name" />
+              </el-select>
           </el-form-item>
           <el-form-item label="会议日期">
             <el-date-picker v-model="createForm.meetingDate" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
@@ -1163,7 +1217,7 @@ onUnmounted(() => {
     </el-dialog>
 
     <!-- Admin edit dialog -->
-    <el-dialog v-model="editVisible" title="编辑问题" width="700px">
+    <el-dialog v-model="editVisible" title="编辑问题" width="800px">
       <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="110px">
         <el-row :gutter="20">
           <el-col :span="12">
@@ -1222,7 +1276,9 @@ onUnmounted(() => {
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="会议参与部门">
-              <el-input v-model="editForm.meetingDepartment" />
+              <el-select v-model="editForm.meetingDepartment" multiple placeholder="请选择参与部门" style="width: 100%">
+                <el-option v-for="d in departments" :key="d.name" :label="d.name" :value="d.name" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -1265,7 +1321,7 @@ onUnmounted(() => {
           <div style="flex: 1; min-width: 0;">
             <div style="font-weight: 600; margin-bottom: 12px; color: #e6a23c; font-size: 14px;">临时方案</div>
             <el-form-item label="临时整改方案">
-              <el-input v-model="editForm.temporarySolution" type="textarea" :rows="2" maxlength="2000" show-word-limit />
+              <el-input v-model="editForm.temporarySolution" type="textarea" :rows="4" maxlength="2000" show-word-limit />
             </el-form-item>
             <el-form-item label="临时整改时限">
               <el-date-picker v-model="editForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
@@ -1274,13 +1330,13 @@ onUnmounted(() => {
           <div style="flex: 1; min-width: 0;">
             <div style="font-weight: 600; margin-bottom: 12px; color: #409eff; font-size: 14px;">永久方案</div>
             <el-form-item label="永久解决方案">
-              <el-input v-model="editForm.permanentSolution" type="textarea" :rows="2" maxlength="1000" show-word-limit />
+              <el-input v-model="editForm.permanentSolution" type="textarea" :rows="4" maxlength="1000" show-word-limit />
             </el-form-item>
             <el-form-item label="永久解决时限">
-              <div style="display: flex; align-items: center; gap: 8px">
-                <el-date-picker v-model="editForm.permanentDeadline" type="date" placeholder="选择日期" style="flex: 1" value-format="YYYY-MM-DD" :disabled="editForm.permanentLongTerm" />
-                <el-checkbox v-model="editForm.permanentLongTerm">长期工作</el-checkbox>
-              </div>
+              <el-date-picker v-model="editForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" :disabled="editForm.permanentLongTerm" />
+            </el-form-item>
+            <el-form-item>
+              <el-checkbox v-model="editForm.permanentLongTerm">长期工作（不限截止日期）</el-checkbox>
             </el-form-item>
           </div>
         </div>
@@ -1301,7 +1357,7 @@ onUnmounted(() => {
           <div style="flex: 1; min-width: 0;">
             <div style="font-weight: 600; margin-bottom: 12px; color: #e6a23c; font-size: 14px;">临时方案</div>
             <el-form-item label="临时整改方案" prop="temporarySolution">
-              <el-input v-model="changeProposalForm.temporarySolution" type="textarea" :rows="3" maxlength="2000" show-word-limit />
+              <el-input v-model="changeProposalForm.temporarySolution" type="textarea" :rows="4" maxlength="2000" show-word-limit />
             </el-form-item>
             <el-form-item label="临时整改时限" prop="temporaryDeadline">
               <el-date-picker v-model="changeProposalForm.temporaryDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" />
@@ -1310,13 +1366,13 @@ onUnmounted(() => {
           <div style="flex: 1; min-width: 0;">
             <div style="font-weight: 600; margin-bottom: 12px; color: #409eff; font-size: 14px;">永久方案</div>
             <el-form-item label="永久解决方案">
-              <el-input v-model="changeProposalForm.permanentSolution" type="textarea" :rows="3" maxlength="1000" show-word-limit />
+              <el-input v-model="changeProposalForm.permanentSolution" type="textarea" :rows="4" maxlength="1000" show-word-limit />
             </el-form-item>
             <el-form-item label="永久解决时限">
-              <div style="display: flex; align-items: center; gap: 8px">
-                <el-date-picker v-model="changeProposalForm.permanentDeadline" type="date" placeholder="选择日期" style="flex: 1" value-format="YYYY-MM-DD" :disabled="changeProposalForm.permanentLongTerm" />
-                <el-checkbox v-model="changeProposalForm.permanentLongTerm">长期工作</el-checkbox>
-              </div>
+              <el-date-picker v-model="changeProposalForm.permanentDeadline" type="date" placeholder="选择日期" style="width: 100%" value-format="YYYY-MM-DD" :disabled="changeProposalForm.permanentLongTerm" />
+            </el-form-item>
+            <el-form-item>
+              <el-checkbox v-model="changeProposalForm.permanentLongTerm">长期工作（不限截止日期）</el-checkbox>
             </el-form-item>
           </div>
         </div>
@@ -1516,7 +1572,7 @@ onUnmounted(() => {
               <h4 style="margin: 0 0 8px">附件 ({{ detailAttachments.length }})</h4>
               <div v-for="att in detailAttachments" :key="att.id"
                    style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #f7f8fa; border-radius: 6px; margin-bottom: 4px; font-size: 13px;">
-                <a :href="att.filePath" target="_blank" style="color: #409eff; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;">
+                <a @click.prevent="previewAttachment(att)" href="#" style="color: #409eff; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; cursor: pointer;">
                   {{ att.fileName }}
                 </a>
                 <span style="color: #909399; font-size: 12px; white-space: nowrap;">{{ (att.fileSize / 1024).toFixed(1) }} KB</span>
@@ -1541,6 +1597,36 @@ onUnmounted(() => {
         </div>
       </template>
     </el-drawer>
+
+    <!-- Attachment preview dialog -->
+    <el-dialog v-model="previewVisible" :title="previewFile?.name || '附件预览'" width="80%" top="5vh" @close="closePreview">
+      <div v-loading="previewLoading" style="min-height: 300px; max-height: 75vh; overflow: auto; display: flex; align-items: center; justify-content: center;">
+        <template v-if="!previewLoading && previewFile">
+          <div v-if="previewFile.error" style="text-align: center; color: #909399;">
+            <p style="font-size: 48px; margin-bottom: 12px;">⚠️</p>
+            <p>预览失败，请下载后查看</p>
+            <el-button type="primary" style="margin-top: 12px;" @click="() => { if (previewFile?.url) { const a = document.createElement('a'); a.href = previewFile.url; a.download = previewFile.name; a.click() } }">下载文件</el-button>
+          </div>
+          <img v-else-if="isPreviewableImage(previewFile.type)" :src="previewFile.url" :alt="previewFile.name" style="max-width: 100%; max-height: 70vh; object-fit: contain;" />
+          <iframe v-else-if="isPreviewablePdf(previewFile.type)" :src="previewFile.url" style="width: 100%; height: 70vh; border: none;" />
+          <pre v-else-if="isPreviewableText(previewFile.type)" style="max-width: 100%; max-height: 70vh; overflow: auto; background: #f5f5f5; padding: 16px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; font-size: 13px; line-height: 1.5; margin: 0;">{{ previewFile.textContent }}</pre>
+          <div v-else-if="isPreviewableWord(previewFile.type)" style="text-align: center;">
+            <p style="font-size: 48px; margin-bottom: 12px;">📄</p>
+            <p style="color: #606266; margin-bottom: 16px;">Office 文档暂不支持直接预览</p>
+            <el-button type="primary" @click="() => { if (previewFile?.url) { const a = document.createElement('a'); a.href = previewFile.url; a.download = previewFile.name; a.click() } }">下载查看</el-button>
+          </div>
+          <div v-else style="text-align: center;">
+            <p style="font-size: 48px; margin-bottom: 12px;">📎</p>
+            <p style="color: #606266; margin-bottom: 16px;">{{ previewFile.name }}</p>
+            <el-button type="primary" @click="() => { if (previewFile?.url) { const a = document.createElement('a'); a.href = previewFile.url; a.download = previewFile.name; a.click() } }">下载文件</el-button>
+          </div>
+        </template>
+      </div>
+      <template #footer>
+        <el-button @click="closePreview">关闭</el-button>
+        <el-button v-if="previewFile?.url && !previewFile?.error" type="primary" @click="() => { if (previewFile?.url) { const a = document.createElement('a'); a.href = previewFile.url; a.download = previewFile.name; a.click() } }">下载</el-button>
+      </template>
+    </el-dialog>
 
     <!-- Shared action dropdown menu (single instance, avoids per-row Popper overhead) -->
     <teleport to="body">
