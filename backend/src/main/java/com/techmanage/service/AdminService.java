@@ -14,6 +14,7 @@ import com.techmanage.entity.IssueCategory;
 import com.techmanage.entity.IssueOccasion;
 import com.techmanage.entity.Role;
 import com.techmanage.entity.SystemInfo;
+import com.techmanage.entity.SystemConfig;
 import com.techmanage.entity.Team;
 
 import java.util.List;
@@ -56,4 +57,9 @@ public interface AdminService {
     IssueOccasion createOccasion(IssueOccasionRequest request);
     IssueOccasion updateOccasion(Long id, IssueOccasionRequest request);
     void deleteOccasion(Long id);
+
+    // 系统配置管理
+    List<SystemConfig> listConfigs();
+    SystemConfig saveConfig(String configKey, String configValue, String description);
+    void deleteConfig(Long id);
 }

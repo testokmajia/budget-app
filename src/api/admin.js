@@ -90,6 +90,11 @@ export function deleteOccasion(id) {
   return request.delete(`/admin/occasions/${id}`)
 }
 
+// 系统配置
+export function getConfigs() { return request.get('/admin/configs') }
+export function saveConfig(data) { return request.post('/admin/configs', data) }
+export function deleteConfig(id) { return request.delete(`/admin/configs/${id}`) }
+
 // Excel导出
 export function exportUsers() { return request.get('/admin/users/export', { responseType: 'blob' }) }
 export function exportCategories() { return request.get('/admin/categories/export', { responseType: 'blob' }) }

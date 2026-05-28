@@ -10,6 +10,7 @@ import com.techmanage.repository.IssueFeedbackRepository;
 import com.techmanage.repository.RewardPunishmentRepository;
 import com.techmanage.repository.TeamRepository;
 import com.techmanage.repository.UserRepository;
+import com.techmanage.repository.WeeklyReportRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,15 +36,18 @@ public class DashboardController {
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final RewardPunishmentRepository rewardRepository;
+    private final WeeklyReportRepository weeklyReportRepository;
 
     public DashboardController(IssueFeedbackRepository issueRepository,
                                TeamRepository teamRepository,
                                UserRepository userRepository,
-                               RewardPunishmentRepository rewardRepository) {
+                               RewardPunishmentRepository rewardRepository,
+                               WeeklyReportRepository weeklyReportRepository) {
         this.issueRepository = issueRepository;
         this.teamRepository = teamRepository;
         this.userRepository = userRepository;
         this.rewardRepository = rewardRepository;
+        this.weeklyReportRepository = weeklyReportRepository;
     }
 
     @GetMapping("/stats")
@@ -185,6 +189,30 @@ public class DashboardController {
                 "待确认完成", "您提交的问题等待确认", myConfirm,
                 "Issue", "statuses=待确认"
             ));
+        }
+
+        // Weekly report pending approvals (for team leaders)
+        if (userName != null && !userName.isBlank()) {
+            List<Team> ledTeams = teamRepository.findByLeader(userName);
+            if (!ledTeams.isEmpty()) {
+                Set<String> memberNames = ledTeams.stream()
+                    .flatMap(t -> {
+                        if (t.getMembers() == null || t.getMembers().isBlank()) return java.util.stream.Stream.empty();
+                        return Arrays.stream(t.getMembers().split(",")).map(String::trim).filter(s -> !s.isEmpty());
+                    })
+                    .collect(Collectors.toSet());
+                List<Long> memberIds = userRepository.findByNameIn(new ArrayList<>(memberNames)).stream()
+                    .map(User::getId).collect(Collectors.toList());
+                if (!memberIds.isEmpty()) {
+                    long pendingReports = weeklyReportRepository.countPendingByUserIds(memberIds);
+                    if (pendingReports > 0) {
+                        pendingTasks.add(new DashboardStats.PendingTask(
+                            "待审批周报", "团队成员提交的周报待审批", pendingReports,
+                            "Weekly", ""
+                        ));
+                    }
+                }
+            }
         }
 
         // Reward/punishment ranking (top 10 by total score)

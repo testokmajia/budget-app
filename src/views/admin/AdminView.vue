@@ -2,7 +2,7 @@
 import { ref, onMounted, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete, Download } from '@element-plus/icons-vue'
-import { getUsers, createUser, updateUser, toggleUser, resetPassword, getRoles, getCategories, createCategory, updateCategory, deleteCategory, getDepartments, createDepartment, updateDepartment, deleteDepartment, getSystems, createSystem, updateSystem, deleteSystem, getTeams, createTeam, updateTeam, deleteTeam, getOccasions, createOccasion, updateOccasion, deleteOccasion, exportUsers, exportCategories, exportDepartments, exportSystems, exportTeams, exportOccasions } from '@/api/admin'
+import { getUsers, createUser, updateUser, toggleUser, resetPassword, getRoles, getCategories, createCategory, updateCategory, deleteCategory, getDepartments, createDepartment, updateDepartment, deleteDepartment, getSystems, createSystem, updateSystem, deleteSystem, getTeams, createTeam, updateTeam, deleteTeam, getOccasions, createOccasion, updateOccasion, deleteOccasion, getConfigs, saveConfig, deleteConfig, exportUsers, exportCategories, exportDepartments, exportSystems, exportTeams, exportOccasions } from '@/api/admin'
 
 const activeTab = ref('users')
 
@@ -358,6 +358,42 @@ async function handleOccasionSubmit() {
 	fetchOccasions()
 }
 
+// === 系统配置管理 ===
+const configs = ref([])
+const configDialogVisible = ref(false)
+const configForm = reactive({ configKey: '', configValue: '', description: '' })
+const isConfigEdit = ref(false)
+const editConfigId = ref(null)
+
+async function fetchConfigs() {
+	const res = await getConfigs()
+	configs.value = res.data || []
+}
+function handleAddConfig() {
+	isConfigEdit.value = false
+	editConfigId.value = null
+	Object.assign(configForm, { configKey: '', configValue: '', description: '' })
+	configDialogVisible.value = true
+}
+function handleEditConfig(row) {
+	isConfigEdit.value = true
+	editConfigId.value = row.id
+	Object.assign(configForm, { configKey: row.configKey, configValue: row.configValue, description: row.description || '' })
+	configDialogVisible.value = true
+}
+async function handleDeleteConfig(row) {
+	await ElMessageBox.confirm('确定删除该配置吗？', '提示', { type: 'warning' })
+	await deleteConfig(row.id)
+	ElMessage.success('已删除')
+	fetchConfigs()
+}
+async function handleConfigSubmit() {
+	await saveConfig(configForm)
+	ElMessage.success(isConfigEdit.value ? '已更新' : '已创建')
+	configDialogVisible.value = false
+	fetchConfigs()
+}
+
 function downloadBlob(res, filename) {
   const url = window.URL.createObjectURL(new Blob([res]))
   const a = document.createElement('a')
@@ -394,6 +430,7 @@ onMounted(() => {
   fetchSystems()
   fetchTeams()
   fetchOccasions()
+  fetchConfigs()
 })
 </script>
 
@@ -577,6 +614,29 @@ onMounted(() => {
         <div style="text-align: right; margin-top: 12px; color: #606266; font-size: 14px">
           团队成员合计：<strong>{{ totalTeamMembers }}</strong> 人
         </div>
+      </el-tab-pane>
+
+      <!-- 系统配置 -->
+      <el-tab-pane label="系统配置" name="configs">
+        <div style="margin-bottom: 16px">
+          <el-button type="primary" :icon="Plus" @click="handleAddConfig">新增配置</el-button>
+        </div>
+        <el-table :data="configs" stripe border>
+          <el-table-column prop="configKey" label="配置键" width="220" />
+          <el-table-column prop="configValue" label="配置值" min-width="300">
+            <template #default="{ row }">
+              <span v-if="row.configKey === 'deepseek.api.key'">{{ row.configValue ? row.configValue.substring(0, 12) + '****' + row.configValue.substring(row.configValue.length - 4) : '-' }}</span>
+              <span v-else>{{ row.configValue }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip />
+          <el-table-column label="操作" width="160" class-name="actions-col">
+            <template #default="{ row }">
+              <el-button type="primary" link :icon="Edit" @click="handleEditConfig(row)">编辑</el-button>
+              <el-button type="danger" link :icon="Delete" @click="handleDeleteConfig(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </el-tab-pane>
 
       <!-- 提出场合 -->
@@ -787,6 +847,25 @@ onMounted(() => {
       <template #footer>
         <el-button @click="teamDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleTeamSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 配置弹窗 -->
+    <el-dialog v-model="configDialogVisible" :title="isConfigEdit ? '编辑配置' : '新增配置'" width="520px">
+      <el-form :model="configForm" label-width="80px">
+        <el-form-item label="配置键">
+          <el-input v-model="configForm.configKey" :disabled="isConfigEdit" placeholder="如：deepseek.api.key" />
+        </el-form-item>
+        <el-form-item label="配置值">
+          <el-input v-model="configForm.configValue" type="textarea" :rows="3" placeholder="配置值" />
+        </el-form-item>
+        <el-form-item label="说明">
+          <el-input v-model="configForm.description" placeholder="配置说明（选填）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="configDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleConfigSubmit">确定</el-button>
       </template>
     </el-dialog>
 

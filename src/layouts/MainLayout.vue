@@ -15,6 +15,7 @@ import {
   SwitchButton,
   Menu,
   Lock,
+  Document,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -29,6 +30,7 @@ const pageTitle = computed(() => {
     '/checklist': '清单管理',
     '/reward': '奖惩记录',
     '/issue': '科技问题管理',
+    '/weekly': '工作周报',
     '/pending': '问题解决实施',
     '/admin': '系统管理',
   }
@@ -113,6 +115,7 @@ const menuItems = [
   { path: '/checklist', title: '清单管理', icon: List },
   { path: '/reward', title: '奖惩记录', icon: Trophy },
   { path: '/issue', title: '科技问题管理', icon: Warning },
+  { path: '/weekly', title: '工作周报', icon: Document },
 ]
 
 const adminMenu = [

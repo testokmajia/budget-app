@@ -6,6 +6,7 @@ import com.techmanage.entity.Department;
 import com.techmanage.entity.IssueCategory;
 import com.techmanage.entity.IssueOccasion;
 import com.techmanage.entity.Role;
+import com.techmanage.entity.SystemConfig;
 import com.techmanage.entity.SystemInfo;
 import com.techmanage.entity.Team;
 import com.techmanage.service.AdminService;
@@ -294,5 +295,26 @@ public class AdminController {
                 o.isEnabled() ? "启用" : "禁用"
         )).toList();
         return excelResponse("occasions.xlsx", ExcelUtil.generate("提出场合", headers, rows));
+    }
+
+    // === 系统配置管理 ===
+
+    @GetMapping("/configs")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ApiResponse<List<SystemConfig>> listConfigs() {
+        return ApiResponse.ok(adminService.listConfigs());
+    }
+
+    @PostMapping("/configs")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ApiResponse<SystemConfig> saveConfig(@RequestBody SystemConfigRequest request) {
+        return ApiResponse.ok(adminService.saveConfig(request.configKey(), request.configValue(), request.description()));
+    }
+
+    @DeleteMapping("/configs/{id}")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ApiResponse<Void> deleteConfig(@PathVariable Long id) {
+        adminService.deleteConfig(id);
+        return ApiResponse.ok();
     }
 }

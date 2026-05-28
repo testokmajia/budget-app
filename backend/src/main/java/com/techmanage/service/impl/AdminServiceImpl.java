@@ -13,6 +13,7 @@ import com.techmanage.entity.Department;
 import com.techmanage.entity.IssueCategory;
 import com.techmanage.entity.IssueOccasion;
 import com.techmanage.entity.Role;
+import com.techmanage.entity.SystemConfig;
 import com.techmanage.entity.SystemInfo;
 import com.techmanage.entity.Team;
 import com.techmanage.entity.User;
@@ -21,6 +22,7 @@ import com.techmanage.repository.IssueCategoryRepository;
 import com.techmanage.repository.IssueFeedbackRepository;
 import com.techmanage.repository.IssueOccasionRepository;
 import com.techmanage.repository.RoleRepository;
+import com.techmanage.repository.SystemConfigRepository;
 import com.techmanage.repository.SystemInfoRepository;
 import com.techmanage.repository.TeamRepository;
 import com.techmanage.repository.UserRepository;
@@ -49,6 +51,7 @@ public class AdminServiceImpl implements AdminService {
     private final TeamRepository teamRepository;
     private final IssueOccasionRepository occasionRepository;
     private final IssueFeedbackRepository issueFeedbackRepository;
+    private final SystemConfigRepository systemConfigRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AdminServiceImpl(UserRepository userRepository,
@@ -59,6 +62,7 @@ public class AdminServiceImpl implements AdminService {
                            TeamRepository teamRepository,
                            IssueOccasionRepository occasionRepository,
                            IssueFeedbackRepository issueFeedbackRepository,
+                           SystemConfigRepository systemConfigRepository,
                            PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -68,6 +72,7 @@ public class AdminServiceImpl implements AdminService {
         this.teamRepository = teamRepository;
         this.occasionRepository = occasionRepository;
         this.issueFeedbackRepository = issueFeedbackRepository;
+        this.systemConfigRepository = systemConfigRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -322,6 +327,31 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public void deleteOccasion(Long id) {
         occasionRepository.deleteById(id);
+    }
+
+    @Override
+    public List<SystemConfig> listConfigs() {
+        return systemConfigRepository.findAll();
+    }
+
+    @Override
+    public SystemConfig saveConfig(String configKey, String configValue, String description) {
+        var existing = systemConfigRepository.findByConfigKey(configKey);
+        SystemConfig config;
+        if (existing.isPresent()) {
+            config = existing.get();
+        } else {
+            config = new SystemConfig();
+            config.setConfigKey(configKey);
+        }
+        config.setConfigValue(configValue);
+        if (description != null) config.setDescription(description);
+        return systemConfigRepository.save(config);
+    }
+
+    @Override
+    public void deleteConfig(Long id) {
+        systemConfigRepository.deleteById(id);
     }
 
     private UserResponse toUserResponse(User user) {

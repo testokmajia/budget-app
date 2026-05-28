@@ -44,6 +44,12 @@ const routes = [
         meta: { title: '问题解决实施' },
       },
       {
+        path: 'weekly',
+        name: 'Weekly',
+        component: () => import('@/views/weekly/WeeklyView.vue'),
+        meta: { title: '工作周报' },
+      },
+      {
         path: 'admin',
         name: 'Admin',
         component: () => import('@/views/admin/AdminView.vue'),
