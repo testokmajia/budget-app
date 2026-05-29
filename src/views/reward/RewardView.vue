@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, Upload, ArrowDown } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Upload } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { getList, create, update, remove, uploadFile } from '@/api/reward'
 import { getDepartments, getUsers } from '@/api/admin'
@@ -14,13 +14,19 @@ const allUsers = ref([])
 
 const canEdit = computed(() => userStore.hasRole('ROLE_CLERK') || userStore.hasRole('ROLE_ADMIN'))
 
+const detailVisible = ref(false)
+const detailRow = ref(null)
+
+function showDetail(row) {
+  detailRow.value = row
+  detailVisible.value = true
+}
+
 const searchForm = reactive({
   type: '',
   department: '',
   keyword: '',
   dateRange: [],
-  scoreMin: null,
-  scoreMax: null,
 })
 
 const dialogVisible = ref(false)
@@ -34,7 +40,6 @@ const form = reactive({
   description: '',
   department: userStore.user?.department || '',
   decisionDate: '',
-  score: null,
   attachmentUrl: '',
   attachmentFileName: '',
 })
@@ -45,11 +50,7 @@ const rules = {
   description: [{ required: true, message: '请输入内容描述', trigger: 'blur' }],
   department: [{ required: true, message: '请选择部门', trigger: 'change' }],
   decisionDate: [{ required: true, message: '请选择日期', trigger: 'change' }],
-  score: [{ required: true, message: '请输入分值', trigger: 'blur' }],
 }
-
-const scoreLabel = computed(() => form.type === '奖励' ? '奖励分值' : '惩罚分值')
-const scorePlaceholder = computed(() => form.type === '惩罚' ? '自动转为负数' : '')
 
 async function fetchData() {
   loading.value = true
@@ -62,8 +63,6 @@ async function fetchData() {
       params.dateFrom = searchForm.dateRange[0]
       params.dateTo = searchForm.dateRange[1]
     }
-    if (searchForm.scoreMin != null) params.scoreMin = searchForm.scoreMin
-    if (searchForm.scoreMax != null) params.scoreMax = searchForm.scoreMax
     const res = await getList(params)
     tableData.value = res.data || []
   } finally {
@@ -81,7 +80,6 @@ function handleAdd() {
     description: '',
     department: userStore.user?.department || '',
     decisionDate: '',
-    score: null,
     attachmentUrl: '',
     attachmentFileName: '',
   })
@@ -98,7 +96,6 @@ function handleEdit(row) {
     description: row.description,
     department: row.department,
     decisionDate: row.decisionDate,
-    score: row.score != null ? Math.abs(row.score) : null,
     attachmentUrl: row.attachmentUrl || '',
     attachmentFileName: row.attachmentFileName || '',
   })
@@ -136,11 +133,7 @@ async function handleSubmit() {
     ElMessage.warning('请选择涉及人员')
     return
   }
-  if (form.score == null || form.score === '') {
-    ElMessage.warning('请输入分值')
-    return
-  }
-  const data = { ...form, decisionDate: form.decisionDate || null, score: Number(form.score) }
+  const data = { ...form, decisionDate: form.decisionDate || null }
   if (isEdit.value) {
     data.involvedPersonNames = [form.involvedPersonNames[0] || form.involvedPersonNames]
     await update(editId.value, data)
@@ -157,15 +150,6 @@ function getTypeTag(type) {
   return type === '奖励' ? 'success' : 'danger'
 }
 
-function scoreColor(score) {
-  if (score == null) return ''
-  return score > 0 ? '#67c23a' : score < 0 ? '#f56c6c' : '#909399'
-}
-
-function formatScore(score) {
-  if (score == null) return '-'
-  return score > 0 ? `+${score}` : `${score}`
-}
 function truncateFileName(name) {
   if (!name) return '查看'
   return name.length > 20 ? name.slice(0, 20) + '...' : name
@@ -217,10 +201,7 @@ onMounted(() => {
         style="width: 240px"
         @change="fetchData"
       />
-      <el-input-number v-model="searchForm.scoreMin" placeholder="分值最低" style="width: 130px" controls-position="right" @change="fetchData" />
-      <span style="color: #909399">-</span>
-      <el-input-number v-model="searchForm.scoreMax" placeholder="分值最高" style="width: 130px" controls-position="right" @change="fetchData" />
-      <el-button @click="Object.assign(searchForm, { type: '', department: '', keyword: '', dateRange: [], scoreMin: null, scoreMax: null }); fetchData()">重置</el-button>
+      <el-button @click="Object.assign(searchForm, { type: '', department: '', keyword: '', dateRange: [] }); fetchData()">重置</el-button>
     </div>
 
     <el-table :data="tableData" v-loading="loading" stripe border>
@@ -230,12 +211,11 @@ onMounted(() => {
           <el-tag :type="getTypeTag(row.type)">{{ row.type }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="分值" width="80" align="center">
+      <el-table-column label="标题" min-width="160" show-overflow-tooltip>
         <template #default="{ row }">
-          <span :style="{ color: scoreColor(row.score), fontWeight: '600' }">{{ formatScore(row.score) }}</span>
+          <a class="title-link" @click.prevent="showDetail(row)">{{ row.title }}</a>
         </template>
       </el-table-column>
-      <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
       <el-table-column prop="department" label="部门" width="120" />
       <el-table-column prop="decisionDate" label="决定日期" width="110" />
       <el-table-column label="附件" width="180">
@@ -270,21 +250,12 @@ onMounted(() => {
             <el-option v-for="u in allUsers" :key="u.id" :label="u.name" :value="u.name" />
           </el-select>
         </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="类型" prop="type">
-              <el-select v-model="form.type" style="width: 100%">
-                <el-option label="奖励" value="奖励" />
-                <el-option label="惩罚" value="惩罚" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="scoreLabel" prop="score">
-              <el-input-number v-model="form.score" :min="0" style="width: 100%" :placeholder="scorePlaceholder" controls-position="right" />
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <el-form-item label="类型" prop="type">
+          <el-select v-model="form.type" style="width: 100%">
+            <el-option label="奖励" value="奖励" />
+            <el-option label="惩罚" value="惩罚" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="标题" prop="title">
           <el-input v-model="form.title" maxlength="200" />
         </el-form-item>
@@ -323,6 +294,53 @@ onMounted(() => {
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Detail dialog -->
+    <el-dialog v-model="detailVisible" title="奖惩详情" width="580px">
+      <template v-if="detailRow">
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-label">涉及人员</span>
+            <span class="detail-value">{{ detailRow.involvedPerson }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">类型</span>
+            <el-tag :type="getTypeTag(detailRow.type)" size="small">{{ detailRow.type }}</el-tag>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">部门</span>
+            <span class="detail-value">{{ detailRow.department }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">决定日期</span>
+            <span class="detail-value">{{ detailRow.decisionDate }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">录入人</span>
+            <span class="detail-value">{{ detailRow.creatorName }}</span>
+          </div>
+          <div class="detail-item" v-if="detailRow.createdAt">
+            <span class="detail-label">录入时间</span>
+            <span class="detail-value">{{ detailRow.createdAt?.substring(0, 16)?.replace('T', ' ') }}</span>
+          </div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">标题</div>
+          <div class="detail-value" style="font-weight: 600; margin-top: 4px;">{{ detailRow.title }}</div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">内容描述</div>
+          <div class="detail-value detail-desc">{{ detailRow.description }}</div>
+        </div>
+        <div class="detail-block" v-if="detailRow.attachmentUrl">
+          <div class="detail-label">附件</div>
+          <a :href="detailRow.attachmentUrl" target="_blank" class="attachment-link">{{ detailRow.attachmentFileName || detailRow.attachmentUrl }}</a>
+        </div>
+      </template>
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -374,5 +392,47 @@ onMounted(() => {
   white-space: nowrap;
   display: block;
   max-width: 100%;
+}
+
+.title-link {
+  color: #303133;
+  cursor: pointer;
+  text-decoration: none;
+}
+.title-link:hover {
+  color: #1890ff;
+  text-decoration: underline;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 24px;
+  margin-bottom: 16px;
+}
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.detail-label {
+  font-size: 13px;
+  color: rgba(0,0,0,0.45);
+  flex-shrink: 0;
+}
+.detail-value {
+  font-size: 14px;
+  color: rgba(0,0,0,0.85);
+}
+.detail-block {
+  margin-bottom: 16px;
+}
+.detail-desc {
+  margin-top: 4px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  line-height: 1.6;
 }
 </style>

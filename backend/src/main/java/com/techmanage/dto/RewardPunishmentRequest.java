@@ -17,5 +17,5 @@ public record RewardPunishmentRequest(
     String documentNo,
     String attachmentUrl,
     String attachmentFileName,
-    @NotNull Integer score
+    Integer score
 ) {}

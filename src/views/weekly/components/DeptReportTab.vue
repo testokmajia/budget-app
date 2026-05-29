@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { mergeReports, getDeptReports, getDeptReport, updateDeptReport, submitDeptReport, finalizeDeptReport, exportWord, exportHtml, listTeamSummariesByWeek } from '@/api/weekly'
+import { formatSummaryContent } from '@/utils/format'
 
 const userStore = useUserStore()
 const isHead = ref(userStore.hasRole('ROLE_ADMIN'))
@@ -61,23 +62,6 @@ function buildContentFromFields() {
     nextWeekPlans: editNextWeekPlans.value,
     coordinationItems: editCoordinationItems.value,
   })
-}
-
-function formatContent(text) {
-  if (!text) return ''
-  try {
-    const obj = JSON.parse(text)
-    if (typeof obj === 'object') {
-      let html = ''
-      if (obj.overview) html += '<h3>本周工作概览</h3><p>' + obj.overview + '</p>'
-      if (obj.keyProgress) html += '<h3>重点工作进展</h3><div>' + obj.keyProgress.replace(/\n/g, '<br>') + '</div>'
-      if (obj.commonIssues) html += '<h3>共性问题与风险</h3><div>' + obj.commonIssues.replace(/\n/g, '<br>') + '</div>'
-      if (obj.nextWeekPlans) html += '<h3>下周重点计划</h3><div>' + obj.nextWeekPlans.replace(/\n/g, '<br>') + '</div>'
-      if (obj.coordinationItems) html += '<h3>需要协调的事项</h3><div>' + obj.coordinationItems.replace(/\n/g, '<br>') + '</div>'
-      return html
-    }
-  } catch { /* not JSON */ }
-  return text.replace(/\n/g, '<br>')
 }
 
 function getMonday() {
@@ -292,7 +276,7 @@ onMounted(() => {
         </div>
         <div class="merge-body">
           <h4 style="margin:0 0 12px 0;">组长：{{ selectedTeamSummary.leaderName }}</h4>
-          <div class="summary-html" v-html="formatContent(selectedTeamSummary.editedContent || selectedTeamSummary.mergedContent)"></div>
+          <div class="summary-html" v-html="formatSummaryContent(selectedTeamSummary.editedContent || selectedTeamSummary.mergedContent)"></div>
         </div>
       </template>
 
@@ -350,7 +334,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div v-else class="summary-html" v-html="formatContent(selectedDeptReport.editedContent || selectedDeptReport.mergedContent)"></div>
+          <div v-else class="summary-html" v-html="formatSummaryContent(selectedDeptReport.editedContent || selectedDeptReport.mergedContent)"></div>
         </div>
       </template>
 

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, Download } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Download, Search } from '@element-plus/icons-vue'
 import { getUsers, createUser, updateUser, toggleUser, resetPassword, getRoles, getCategories, createCategory, updateCategory, deleteCategory, getDepartments, createDepartment, updateDepartment, deleteDepartment, getSystems, createSystem, updateSystem, deleteSystem, getTeams, createTeam, updateTeam, deleteTeam, getOccasions, createOccasion, updateOccasion, deleteOccasion, getConfigs, saveConfig, deleteConfig, exportUsers, exportCategories, exportDepartments, exportSystems, exportTeams, exportOccasions } from '@/api/admin'
 
 const activeTab = ref('users')
@@ -222,9 +222,26 @@ async function handleDepartmentSubmit() {
 // === 所属系统管理 ===
 const systems = ref([])
 const systemDialogVisible = ref(false)
-const systemForm = reactive({ name: '', leader: '', team: '', enabled: true })
+const systemForm = reactive({ code: '', name: '', leader: '', team: '', enabled: true })
 const isSysEdit = ref(false)
 const editSysId = ref(null)
+const sysFilters = reactive({ name: '', leader: '', team: '', enabled: '' })
+
+const filteredSystems = computed(() => {
+  return systems.value.filter(s => {
+    if (sysFilters.name) {
+      const names = Array.isArray(sysFilters.name) ? sysFilters.name : [sysFilters.name]
+      if (names.length > 0 && !names.some(n => s.name.toLowerCase().includes(n.toLowerCase()))) return false
+    }
+    if (sysFilters.leader && s.leader !== sysFilters.leader) return false
+    if (sysFilters.team && s.team !== sysFilters.team) return false
+    if (sysFilters.enabled !== '' && sysFilters.enabled !== null) {
+      if (sysFilters.enabled === 'enabled' && !s.enabled) return false
+      if (sysFilters.enabled === 'disabled' && s.enabled) return false
+    }
+    return true
+  })
+})
 
 async function fetchSystems() {
   const res = await getSystems()
@@ -233,13 +250,13 @@ async function fetchSystems() {
 function handleAddSystem() {
   isSysEdit.value = false
   editSysId.value = null
-  Object.assign(systemForm, { name: '', leader: '', team: '', enabled: true })
+  Object.assign(systemForm, { code: '', name: '', leader: '', team: '', enabled: true })
   systemDialogVisible.value = true
 }
 function handleEditSystem(row) {
   isSysEdit.value = true
   editSysId.value = row.id
-  Object.assign(systemForm, { name: row.name, leader: row.leader || '', team: row.team || '', enabled: row.enabled })
+  Object.assign(systemForm, { code: row.code || '', name: row.name, leader: row.leader || '', team: row.team || '', enabled: row.enabled })
   systemDialogVisible.value = true
 }
 async function handleDeleteSystem(row) {
@@ -249,15 +266,23 @@ async function handleDeleteSystem(row) {
   fetchSystems()
 }
 async function handleSystemSubmit() {
-  if (isSysEdit.value) {
-    await updateSystem(editSysId.value, systemForm)
-    ElMessage.success('已更新')
-  } else {
-    await createSystem(systemForm)
-    ElMessage.success('已创建')
+  if (!systemForm.code || !/^\d{5}$/.test(systemForm.code)) {
+    ElMessage.warning('系统编号必须为5位数字')
+    return
   }
-  systemDialogVisible.value = false
-  fetchSystems()
+  try {
+    if (isSysEdit.value) {
+      await updateSystem(editSysId.value, systemForm)
+      ElMessage.success('已更新')
+    } else {
+      await createSystem(systemForm)
+      ElMessage.success('已创建')
+    }
+    systemDialogVisible.value = false
+    fetchSystems()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '操作失败')
+  }
 }
 
 // === 团队管理 ===
@@ -556,11 +581,35 @@ onMounted(() => {
 
       <!-- 信息系统管理 -->
       <el-tab-pane label="信息系统" name="systems">
-        <div style="margin-bottom: 16px">
+        <div style="margin-bottom: 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
           <el-button type="primary" :icon="Plus" @click="handleAddSystem">新增系统</el-button>
           <el-button :icon="Download" @click="handleExportSystems">导出</el-button>
+          <el-select
+            v-model="sysFilters.name"
+            multiple
+            filterable
+            clearable
+            placeholder="系统名称"
+            style="width: 200px"
+            collapse-tags
+            collapse-tags-tooltip
+          >
+            <el-option v-for="s in systems" :key="s.name" :label="s.name" :value="s.name" />
+          </el-select>
+          <el-select v-model="sysFilters.leader" placeholder="负责人" clearable style="width: 140px">
+            <el-option v-for="u in allUsers" :key="u.name" :label="u.name" :value="u.name" />
+          </el-select>
+          <el-select v-model="sysFilters.team" placeholder="所属团队" clearable style="width: 140px">
+            <el-option v-for="t in teams" :key="t.name" :label="t.name" :value="t.name" />
+          </el-select>
+          <el-select v-model="sysFilters.enabled" placeholder="状态" clearable style="width: 100px">
+            <el-option label="启用" value="enabled" />
+            <el-option label="禁用" value="disabled" />
+          </el-select>
+          <el-button :icon="Search" @click="() => {}">搜索</el-button>
         </div>
-        <el-table :data="systems" stripe border>
+        <el-table :data="filteredSystems" stripe border>
+          <el-table-column prop="code" label="系统编号" width="110" />
           <el-table-column prop="name" label="系统名称" width="180" />
           <el-table-column prop="leader" label="系统负责人" width="120" />
           <el-table-column prop="team" label="所属团队" width="120" />
@@ -788,6 +837,9 @@ onMounted(() => {
     <!-- 系统弹窗 -->
     <el-dialog v-model="systemDialogVisible" :title="isSysEdit ? '编辑系统' : '新增系统'" width="480px">
       <el-form :model="systemForm" label-width="100px">
+        <el-form-item label="系统编号" required>
+          <el-input v-model="systemForm.code" maxlength="5" placeholder="5位数字编码" />
+        </el-form-item>
         <el-form-item label="系统名称">
           <el-input v-model="systemForm.name" />
         </el-form-item>

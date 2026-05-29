@@ -30,15 +30,13 @@ public class RewardPunishmentController {
             @RequestParam(required = false) String department,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
-            @RequestParam(required = false) Integer scoreMin,
-            @RequestParam(required = false) Integer scoreMax) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
         Long userId = (Long) auth.getPrincipal();
         boolean canViewAll = auth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")
                 || a.getAuthority().equals("ROLE_CLERK"));
         return ApiResponse.ok(service.list(userId, canViewAll, type, department,
-            keyword, dateFrom, dateTo, scoreMin, scoreMax));
+            keyword, dateFrom, dateTo));
     }
 
     @GetMapping("/{id}")

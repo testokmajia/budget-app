@@ -29,7 +29,7 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
     public List<RewardPunishmentResponse> list(Long userId, boolean canViewAll,
                                                 String type, String department,
                                                 String keyword, LocalDate dateFrom,
-                                                LocalDate dateTo, Integer scoreMin, Integer scoreMax) {
+                                                LocalDate dateTo) {
         List<RewardPunishment> source;
         if (canViewAll) {
             if (type != null && !type.isEmpty() && department != null && !department.isEmpty()) {
@@ -61,14 +61,6 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
                 if (dateTo != null && r.getDecisionDate().isAfter(dateTo)) return false;
                 return true;
             })
-            .filter(r -> {
-                if (scoreMin == null && scoreMax == null) return true;
-                Integer s = r.getScore();
-                if (s == null) return false;
-                if (scoreMin != null && s < scoreMin) return false;
-                if (scoreMax != null && s > scoreMax) return false;
-                return true;
-            })
             .map(this::toResponse)
             .toList();
     }
@@ -83,7 +75,7 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
     @Override
     public List<RewardPunishmentResponse> create(Long userId, RewardPunishmentRequest request) {
         List<RewardPunishmentResponse> results = new ArrayList<>();
-        int baseScore = Math.abs(request.score());
+        int baseScore = request.score() != null ? Math.abs(request.score()) : 0;
         for (String name : request.involvedPersonNames()) {
             if (name == null || name.isBlank()) continue;
             var rp = new RewardPunishment();
@@ -103,7 +95,7 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
         if (!canEditAll && !rp.getCreatorId().equals(userId)) {
             throw new RuntimeException("只能修改自己创建的记录");
         }
-        int baseScore = Math.abs(request.score());
+        int baseScore = request.score() != null ? Math.abs(request.score()) : 0;
         applyRequest(rp, request, baseScore);
         // Update involvedPerson from first name in list if provided
         if (request.involvedPersonNames() != null && !request.involvedPersonNames().isEmpty()) {
@@ -133,7 +125,7 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
         rp.setDocumentNo(req.documentNo());
         rp.setAttachmentUrl(req.attachmentUrl());
         rp.setAttachmentFileName(req.attachmentFileName());
-        rp.setScore("惩罚".equals(req.type()) ? -baseScore : baseScore);
+        rp.setScore(req.score() != null ? ("惩罚".equals(req.type()) ? -baseScore : baseScore) : 0);
     }
 
     private RewardPunishmentResponse toResponse(RewardPunishment rp) {

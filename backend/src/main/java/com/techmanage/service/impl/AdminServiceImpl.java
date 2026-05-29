@@ -239,7 +239,13 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     public SystemInfo createSystem(SystemInfoRequest request) {
+        if (request.code() != null && !request.code().isBlank()) {
+            if (systemInfoRepository.existsByCode(request.code())) {
+                throw new RuntimeException("系统编号 " + request.code() + " 已存在");
+            }
+        }
         SystemInfo system = new SystemInfo();
+        system.setCode(request.code());
         system.setName(request.name());
         system.setLeader(request.leader());
         system.setTeam(request.team());
@@ -251,6 +257,13 @@ public class AdminServiceImpl implements AdminService {
     public SystemInfo updateSystem(Long id, SystemInfoRequest request) {
         SystemInfo system = systemInfoRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("系统不存在"));
+        if (request.code() != null && !request.code().isBlank()) {
+            var existing = systemInfoRepository.findByCode(request.code());
+            if (existing.isPresent() && !existing.get().getId().equals(id)) {
+                throw new RuntimeException("系统编号 " + request.code() + " 已存在");
+            }
+        }
+        system.setCode(request.code());
         system.setName(request.name());
         system.setLeader(request.leader());
         system.setTeam(request.team());

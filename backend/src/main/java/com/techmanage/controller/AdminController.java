@@ -262,8 +262,9 @@ public class AdminController {
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_ISSUE_ADMIN')")
     public ResponseEntity<byte[]> exportSystems() {
         var list = adminService.listSystems();
-        var headers = List.of("系统名称", "系统负责人", "所属团队", "状态");
+        var headers = List.of("系统编号", "系统名称", "系统负责人", "所属团队", "状态");
         List<List<String>> rows = list.stream().map(s -> List.of(
+                s.getCode() != null ? s.getCode() : "",
                 s.getName(), s.getLeader() != null ? s.getLeader() : "",
                 s.getTeam() != null ? s.getTeam() : "", s.isEnabled() ? "启用" : "禁用"
         )).toList();

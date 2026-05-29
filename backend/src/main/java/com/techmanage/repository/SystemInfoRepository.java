@@ -9,5 +9,7 @@ import java.util.Optional;
 public interface SystemInfoRepository extends JpaRepository<SystemInfo, Long> {
     List<SystemInfo> findAllByOrderByIdAsc();
     boolean existsByName(String name);
+    boolean existsByCode(String code);
     Optional<SystemInfo> findByName(String name);
+    Optional<SystemInfo> findByCode(String code);
 }

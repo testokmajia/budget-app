@@ -1,10 +1,14 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { getStats } from '@/api/dashboard'
+import { useUserStore } from '@/stores/user'
 import { DataBoard, Clock, WarningFilled, CircleCheckFilled } from '@element-plus/icons-vue'
 
+const userStore = useUserStore()
 const stats = ref(null)
 const loading = ref(true)
+
+const isItDept = computed(() => userStore.user?.department === '信息科技部')
 
 const statusColors = {
   '待分派': '#909399',
@@ -176,7 +180,7 @@ onMounted(async () => {
             <h3 class="chart-title">问题团队分布</h3>
             <div class="bar-chart" v-if="stats.teamDistribution.length > 0">
               <div class="bar-row" v-for="t in stats.teamDistribution" :key="t.team">
-                <div class="bar-label team-label">{{ t.team }}</div>
+                <div class="bar-label team-label" :title="t.team">{{ t.team }}</div>
                 <div class="bar-track">
                   <div
                     class="bar-fill team-fill"
@@ -215,11 +219,11 @@ onMounted(async () => {
       </el-row>
 
       <!-- Reward ranking -->
-      <el-row :gutter="20" class="charts-row" v-if="stats.rewardRanking && stats.rewardRanking.length > 0">
+      <el-row :gutter="20" class="charts-row" v-if="isItDept">
         <el-col :span="24">
           <div class="chart-card">
-            <h3 class="chart-title">人员奖惩排名 <span style="font-weight:400;font-size:13px;color:#86909c">(分值合计)</span></h3>
-            <div class="ranking-grid">
+            <h3 class="chart-title">人员奖励排名 <span class="title-sub">(按次数)</span></h3>
+            <div v-if="stats.rewardRanking && stats.rewardRanking.length > 0" class="ranking-grid">
               <div
                 v-for="(r, idx) in stats.rewardRanking"
                 :key="r.personName"
@@ -234,13 +238,40 @@ onMounted(async () => {
                 </div>
                 <div class="ranking-info">
                   <div class="ranking-name">{{ r.personName }}</div>
-                  <div class="ranking-dept">{{ r.department }}</div>
                 </div>
-                <div class="ranking-score" :class="{ positive: r.totalScore > 0, negative: r.totalScore < 0 }">
-                  {{ r.totalScore > 0 ? '+' : '' }}{{ r.totalScore }}
-                </div>
+                <div class="ranking-score reward">{{ r.count }}次</div>
               </div>
             </div>
+            <div v-else class="empty-hint">暂无奖励记录</div>
+          </div>
+        </el-col>
+      </el-row>
+
+      <!-- Punishment ranking -->
+      <el-row :gutter="20" class="charts-row" v-if="isItDept">
+        <el-col :span="24">
+          <div class="chart-card">
+            <h3 class="chart-title">人员惩罚排名 <span class="title-sub">(按次数)</span></h3>
+            <div v-if="stats.punishmentRanking && stats.punishmentRanking.length > 0" class="ranking-grid">
+              <div
+                v-for="(r, idx) in stats.punishmentRanking"
+                :key="r.personName"
+                class="ranking-item"
+                :class="{ 'top-1': idx === 0, 'top-2': idx === 1, 'top-3': idx === 2 }"
+              >
+                <div class="ranking-pos">
+                  <span v-if="idx === 0" class="medal">🥇</span>
+                  <span v-else-if="idx === 1" class="medal">🥈</span>
+                  <span v-else-if="idx === 2" class="medal">🥉</span>
+                  <span v-else class="pos-num">{{ idx + 1 }}</span>
+                </div>
+                <div class="ranking-info">
+                  <div class="ranking-name">{{ r.personName }}</div>
+                </div>
+                <div class="ranking-score punishment">{{ r.count }}次</div>
+              </div>
+            </div>
+            <div v-else class="empty-hint">暂无惩罚记录</div>
           </div>
         </el-col>
       </el-row>
@@ -339,10 +370,10 @@ onMounted(async () => {
 .bar-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 .bar-label {
-  width: 65px;
+  width: 100px;
   font-size: 13px;
   color: rgba(0,0,0,0.65);
   text-align: right;
@@ -350,7 +381,7 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .team-label {
-  width: 80px;
+  width: 130px;
 }
 .bar-track {
   flex: 1;
@@ -542,22 +573,19 @@ onMounted(async () => {
   font-size: 14px;
   font-weight: 600;
   color: rgba(0,0,0,0.85);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ranking-dept {
-  font-size: 11px;
-  color: rgba(0,0,0,0.45);
-  margin-top: 1px;
 }
 .ranking-score {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
 }
-.ranking-score.positive { color: #52c41a; }
-.ranking-score.negative { color: #f5222d; }
+.ranking-score.reward { color: #52c41a; }
+.ranking-score.punishment { color: #f5222d; }
+.title-sub {
+  font-weight: 400;
+  font-size: 13px;
+  color: #86909c;
+}
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -572,6 +600,13 @@ onMounted(async () => {
     max-width: 100%;
     margin-bottom: 16px;
   }
+}
+.ranking-score.reward { color: #52c41a; }
+.ranking-score.punishment { color: #f5222d; }
+.title-sub {
+  font-weight: 400;
+  font-size: 13px;
+  color: #86909c;
 }
 @media (max-width: 480px) {
   .stat-cards {

@@ -215,20 +215,41 @@ public class DashboardController {
             }
         }
 
-        // Reward/punishment ranking (top 10 by total score)
+        // Reward ranking (top 10 by count)
         List<RewardPunishment> allRewards = rewardRepository.findAllActive();
-        Map<String, Integer> scoreSum = allRewards.stream()
+        List<RewardPunishment> rewardList = allRewards.stream()
+            .filter(r -> "奖励".equals(r.getType()))
+            .toList();
+        Map<String, Long> rewardCountMap = rewardList.stream()
             .collect(Collectors.groupingBy(RewardPunishment::getInvolvedPerson,
-                Collectors.summingInt(r -> r.getScore() != null ? r.getScore() : 0)));
-        Map<String, String> personDept = allRewards.stream()
+                Collectors.counting()));
+        Map<String, String> rewardPersonDept = rewardList.stream()
             .collect(Collectors.toMap(RewardPunishment::getInvolvedPerson,
                 r -> r.getDepartment() != null ? r.getDepartment() : "",
                 (d1, d2) -> d1));
-        List<DashboardStats.RewardRanking> rewardRanking = scoreSum.entrySet().stream()
-            .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+        List<DashboardStats.RewardRanking> rewardRanking = rewardCountMap.entrySet().stream()
+            .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
             .limit(10)
             .map(e -> new DashboardStats.RewardRanking(e.getKey(),
-                personDept.getOrDefault(e.getKey(), ""), e.getValue()))
+                rewardPersonDept.getOrDefault(e.getKey(), ""), e.getValue().intValue()))
+            .toList();
+
+        // Punishment ranking (top 10 by count)
+        List<RewardPunishment> punishmentList = allRewards.stream()
+            .filter(r -> "惩罚".equals(r.getType()))
+            .toList();
+        Map<String, Long> punishmentCountMap = punishmentList.stream()
+            .collect(Collectors.groupingBy(RewardPunishment::getInvolvedPerson,
+                Collectors.counting()));
+        Map<String, String> punishmentPersonDept = punishmentList.stream()
+            .collect(Collectors.toMap(RewardPunishment::getInvolvedPerson,
+                r -> r.getDepartment() != null ? r.getDepartment() : "",
+                (d1, d2) -> d1));
+        List<DashboardStats.RewardRanking> punishmentRanking = punishmentCountMap.entrySet().stream()
+            .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+            .limit(10)
+            .map(e -> new DashboardStats.RewardRanking(e.getKey(),
+                punishmentPersonDept.getOrDefault(e.getKey(), ""), e.getValue().intValue()))
             .toList();
 
         return ApiResponse.ok(new DashboardStats(
@@ -236,7 +257,8 @@ public class DashboardController {
             new DashboardStats.OverdueInfo(tempOverdue, permOverdue),
             personnel,
             pendingTasks,
-            rewardRanking
+            rewardRanking,
+            punishmentRanking
         ));
     }
 }

@@ -8,12 +8,13 @@ public record DashboardStats(
     OverdueInfo overdue,
     List<TeamPersonnel> personnelDistribution,
     List<PendingTask> pendingTasks,
-    List<RewardRanking> rewardRanking
+    List<RewardRanking> rewardRanking,
+    List<RewardRanking> punishmentRanking
 ) {
     public record StatusCount(String status, long count) {}
     public record TeamCount(String team, long count) {}
     public record OverdueInfo(long temporaryOverdue, long permanentOverdue) {}
     public record TeamPersonnel(String teamName, long memberCount) {}
     public record PendingTask(String title, String description, long count, String routeName, String routeQuery) {}
-    public record RewardRanking(String personName, String department, int totalScore) {}
+    public record RewardRanking(String personName, String department, int count) {}
 }
