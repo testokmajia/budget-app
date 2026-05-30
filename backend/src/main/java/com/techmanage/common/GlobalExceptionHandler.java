@@ -15,6 +15,12 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
+        log.warn("Business error: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
         String msg = ex.getBindingResult().getFieldErrors().stream()
@@ -38,7 +44,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleRuntime(RuntimeException ex) {
         log.error("Runtime error", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(ex.getMessage()));
+                .body(ApiResponse.error("服务器内部错误，请稍后重试"));
     }
 
     @ExceptionHandler(Exception.class)

@@ -1,5 +1,6 @@
 package com.techmanage.service.impl;
 
+import com.techmanage.common.BusinessException;
 import com.techmanage.dto.*;
 import com.techmanage.entity.IssueFeedback;
 import com.techmanage.entity.IssueLog;
@@ -172,7 +173,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     public IssueResponse assign(Long id, Long userId, IssueAssignRequest request) {
         var issue = find(id);
         if (!"待分派".equals(issue.getStatus())) {
-            throw new RuntimeException("当前状态不允许分派");
+            throw new BusinessException("当前状态不允许分派");
         }
         saveUndoInfo(issue, userId);
         issue.setResponsibleTeam(request.responsibleTeam());
@@ -181,12 +182,12 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
         String personName;
         if (responsiblePersonId == null) {
             var team = teamRepository.findByName(request.responsibleTeam())
-                    .orElseThrow(() -> new RuntimeException("团队不存在: " + request.responsibleTeam()));
+                    .orElseThrow(() -> new BusinessException("团队不存在: " + request.responsibleTeam()));
             if (team.getLeader() == null || team.getLeader().isBlank()) {
-                throw new RuntimeException("该团队未设置负责人");
+                throw new BusinessException("该团队未设置负责人");
             }
             var leader = userRepository.findByName(team.getLeader())
-                    .orElseThrow(() -> new RuntimeException("团队负责人用户不存在: " + team.getLeader()));
+                    .orElseThrow(() -> new BusinessException("团队负责人用户不存在: " + team.getLeader()));
             responsiblePersonId = leader.getId();
             personName = leader.getName();
         } else {
@@ -224,7 +225,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     public IssueResponse submitSolution(Long id, Long userId, IssueSolutionRequest request) {
         var issue = find(id);
         if (!"待员工处理".equals(issue.getStatus()) && !"已驳回".equals(issue.getStatus())) {
-            throw new RuntimeException("当前状态不允许提交方案");
+            throw new BusinessException("当前状态不允许提交方案");
         }
         saveUndoInfo(issue, userId);
         issue.setTemporarySolution(request.temporarySolution());
@@ -252,7 +253,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     public IssueResponse reviewByLeader(Long id, Long userId, IssueReviewRequest request) {
         var issue = find(id);
         if (!"待组长审核".equals(issue.getStatus())) {
-            throw new RuntimeException("当前状态不允许审核");
+            throw new BusinessException("当前状态不允许审核");
         }
         saveUndoInfo(issue, userId);
         if (request.approved()) {
@@ -271,7 +272,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     public IssueResponse reviewByAdmin(Long id, Long userId, IssueReviewRequest request) {
         var issue = find(id);
         if (!"待管理员审核".equals(issue.getStatus())) {
-            throw new RuntimeException("当前状态不允许审核");
+            throw new BusinessException("当前状态不允许审核");
         }
         saveUndoInfo(issue, userId);
         if (request.approved()) {
@@ -292,11 +293,11 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     public IssueResponse confirm(Long id, Long userId, IssueConfirmRequest request) {
         var issue = find(id);
         if (!"待确认".equals(issue.getStatus())) {
-            throw new RuntimeException("当前状态不允许确认");
+            throw new BusinessException("当前状态不允许确认");
         }
         saveUndoInfo(issue, userId);
         if (!issue.getSubmitterId().equals(userId)) {
-            throw new RuntimeException("只有问题提出人可以确认");
+            throw new BusinessException("只有问题提出人可以确认");
         }
         if (request.satisfied()) {
             issue.setStatus("已完成");
@@ -313,7 +314,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     public IssueResponse reject(Long id, Long userId, IssueRejectRequest request) {
         var issue = find(id);
         if ("已完成".equals(issue.getStatus()) || "已关闭".equals(issue.getStatus())) {
-            throw new RuntimeException("已完成或已关闭的问题不能驳回");
+            throw new BusinessException("已完成或已关闭的问题不能驳回");
         }
         saveUndoInfo(issue, userId);
         issue.setStatus(issue.getResponsiblePersonId() != null ? "待员工处理" : "待分派");
@@ -326,7 +327,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     public IssueResponse close(Long id, Long userId, IssueCloseRequest request) {
         var issue = find(id);
         if ("已关闭".equals(issue.getStatus())) {
-            throw new RuntimeException("该问题已关闭");
+            throw new BusinessException("该问题已关闭");
         }
         saveUndoInfo(issue, userId);
         issue.setStatus("已关闭");
@@ -365,18 +366,18 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     @Override
     public void completeSystemAssignment(Long assignmentId, Long userId, String completionNote) {
         var assignment = systemAssignmentRepository.findById(assignmentId)
-                .orElseThrow(() -> new RuntimeException("系统分配不存在"));
+                .orElseThrow(() -> new BusinessException("系统分配不存在"));
         if (assignment.isCompleted()) {
-            throw new RuntimeException("该分配已完成");
+            throw new BusinessException("该分配已完成");
         }
         if (!assignment.getSystemOwnerId().equals(userId)) {
-            throw new RuntimeException("只有系统负责人可以标记完成");
+            throw new BusinessException("只有系统负责人可以标记完成");
         }
         assignment.setCompleted(true);
         assignment.setCompletedAt(java.time.LocalDateTime.now());
         if (completionNote != null && !completionNote.isBlank()) {
             if (completionNote.length() > 300) {
-                throw new RuntimeException("完成情况不能超过300字");
+                throw new BusinessException("完成情况不能超过300字");
             }
             assignment.setCompletionNote(completionNote.trim());
         }
@@ -401,7 +402,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     public IssueResponse feedbackToSubmitter(Long issueId, Long userId) {
         var issue = find(issueId);
         if (!"待确认".equals(issue.getStatus()) && !"解决中".equals(issue.getStatus())) {
-            throw new RuntimeException("当前状态不允许反馈");
+            throw new BusinessException("当前状态不允许反馈");
         }
         saveUndoInfo(issue, userId);
         issue.setStatus("待确认");
@@ -472,7 +473,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
 
     private IssueFeedback find(Long id) {
         return issueRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("问题不存在"));
+                .orElseThrow(() -> new BusinessException("问题不存在"));
     }
 
     private void addLog(Long issueId, Long userId, String action, String remark) {
@@ -487,10 +488,10 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
     public IssueResponse undo(Long id, Long userId) {
         var issue = find(id);
         if (!userId.equals(issue.getLastOperatorId())) {
-            throw new RuntimeException("只有上一操作人可以撤回");
+            throw new BusinessException("只有上一操作人可以撤回");
         }
         if (issue.getPreviousStatus() == null) {
-            throw new RuntimeException("没有可撤回的操作");
+            throw new BusinessException("没有可撤回的操作");
         }
         String prevStatus = issue.getPreviousStatus();
         issue.setStatus(prevStatus);

@@ -50,12 +50,10 @@ const maxTeamCount = computed(() => {
   return Math.max(1, ...stats.value.teamDistribution.map(t => t.count))
 })
 
-const teamPersonnelTotal = computed(() => {
+const deptTotal = computed(() => {
   if (!stats.value) return 0
   return stats.value.personnelDistribution.reduce((sum, p) => sum + p.memberCount, 0)
 })
-
-const deptTotal = computed(() => teamPersonnelTotal.value + 3)
 
 onMounted(async () => {
   try {
@@ -200,7 +198,6 @@ onMounted(async () => {
             <h3 class="chart-title">
               信息科技部团队人员分布
               <span class="title-totals">
-                <span class="title-tag">团队 {{ teamPersonnelTotal }}人</span>
                 <span class="title-tag dept">部门总计 {{ deptTotal }}人</span>
               </span>
             </h3>

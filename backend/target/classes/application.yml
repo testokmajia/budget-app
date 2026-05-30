@@ -7,22 +7,71 @@ spring:
       max-file-size: 50MB
       max-request-size: 100MB
   datasource:
-    url: jdbc:mysql://localhost:3306/tech_manage?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true
-    username: root
-    password:
+    url: jdbc:mysql://localhost:3306/tech_manage?useSSL=true&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: validate
+    show-sql: false
     open-in-view: false
 
 app:
   jwt:
     secret: tech-manage-jwt-secret-key-must-be-at-least-256-bits-long
     expiration-ms: 86400000
+  upload-dir: ${UPLOAD_DIR:uploads}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  rate-limit:
+    login-max-attempts: ${LOGIN_RATE_LIMIT:10}
+    login-window-minutes: ${LOGIN_RATE_WINDOW:15}
+    trusted-proxies: ${TRUSTED_PROXIES:127.0.0.1,0:0:0:0:0:0:0:1}
 
 wechat:
   miniapp:
     app-id: ${WECHAT_APP_ID:}
     secret: ${WECHAT_APP_SECRET:}
+
+ai:
+  deepseek:
+    api-key: ${DEEPSEEK_API_KEY:}
+    base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+    model: ${DEEPSEEK_MODEL:deepseek-chat}
+
+---
+# Development profile overrides
+spring:
+  config:
+    activate:
+      on-profile: dev
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  datasource:
+    url: jdbc:mysql://localhost:3306/tech_manage?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true
+
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  rate-limit:
+    login-max-attempts: 100
+    login-window-minutes: 15
+    trusted-proxies: ${TRUSTED_PROXIES:127.0.0.1,0:0:0:0:0:0:0:1}
+
+---
+# Production profile overrides
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:mysql://localhost:3306/tech_manage?useSSL=true&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:https://www.techmaodian.online}
+  rate-limit:
+    trusted-proxies: ${TRUSTED_PROXIES:127.0.0.1,0:0:0:0:0:0:0:1}

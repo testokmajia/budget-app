@@ -1,5 +1,6 @@
 package com.techmanage.service.impl;
 
+import com.techmanage.common.BusinessException;
 import com.techmanage.dto.ChangeProposalRequest;
 import com.techmanage.dto.ChangeProposalResponse;
 import com.techmanage.dto.ChangeReviewRequest;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import com.techmanage.common.BusinessException;
 
 @Service
 public class IssueChangeProposalServiceImpl implements IssueChangeProposalService {
@@ -33,13 +35,13 @@ public class IssueChangeProposalServiceImpl implements IssueChangeProposalServic
     public ChangeProposalResponse submit(Long issueId, Long userId, ChangeProposalRequest request,
                                           boolean isTeamLeader, List<Long> ledTeamIds) {
         IssueFeedback issue = issueRepository.findById(issueId)
-                .orElseThrow(() -> new RuntimeException("问题不存在"));
+                .orElseThrow(() -> new BusinessException("问题不存在"));
 
         boolean isResponsible = userId.equals(issue.getResponsiblePersonId());
         boolean isLeaderOfTeam = isTeamLeader && ledTeamIds.contains(issue.getResponsiblePersonId());
 
         if (!isResponsible && !isLeaderOfTeam) {
-            throw new RuntimeException("无权修改该问题的方案");
+            throw new BusinessException("无权修改该问题的方案");
         }
 
         IssueChangeProposal proposal = new IssueChangeProposal();
@@ -88,7 +90,7 @@ public class IssueChangeProposalServiceImpl implements IssueChangeProposalServic
     public ChangeProposalResponse review(Long id, Long reviewerId, ChangeReviewRequest request,
                                           boolean isAdmin, boolean isIssueAdmin) {
         IssueChangeProposal proposal = proposalRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("变更申请不存在"));
+                .orElseThrow(() -> new BusinessException("变更申请不存在"));
 
         if ("PENDING_TEAM_LEADER".equals(proposal.getStatus())) {
             if (request.approved()) {
@@ -104,7 +106,7 @@ public class IssueChangeProposalServiceImpl implements IssueChangeProposalServic
             }
         } else if ("PENDING_ADMIN".equals(proposal.getStatus())) {
             if (!isAdmin && !isIssueAdmin) {
-                throw new RuntimeException("无权审批");
+                throw new BusinessException("无权审批");
             }
             if (request.approved()) {
                 proposal.setReviewedByAdminId(reviewerId);
@@ -119,7 +121,7 @@ public class IssueChangeProposalServiceImpl implements IssueChangeProposalServic
                 proposal.setStatus("REJECTED");
             }
         } else {
-            throw new RuntimeException("当前状态不允许审批");
+            throw new BusinessException("当前状态不允许审批");
         }
 
         proposalRepository.save(proposal);
@@ -136,7 +138,7 @@ public class IssueChangeProposalServiceImpl implements IssueChangeProposalServic
 
     private void applyChanges(IssueChangeProposal proposal) {
         IssueFeedback issue = issueRepository.findById(proposal.getIssueId())
-                .orElseThrow(() -> new RuntimeException("问题不存在"));
+                .orElseThrow(() -> new BusinessException("问题不存在"));
         issue.setTemporarySolution(proposal.getNewTemporarySolution());
         issue.setTemporaryDeadline(proposal.getNewTemporaryDeadline());
         issue.setRootCause(proposal.getNewRootCause());

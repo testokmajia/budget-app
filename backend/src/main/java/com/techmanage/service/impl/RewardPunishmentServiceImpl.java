@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import com.techmanage.common.BusinessException;
 
 @Service
 public class RewardPunishmentServiceImpl implements RewardPunishmentService {
@@ -68,7 +69,7 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
     @Override
     public RewardPunishmentResponse getById(Long id) {
         var rp = repository.findById(id)
-            .orElseThrow(() -> new RuntimeException("记录不存在"));
+            .orElseThrow(() -> new BusinessException("记录不存在"));
         return toResponse(rp);
     }
 
@@ -91,9 +92,9 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
     @Override
     public RewardPunishmentResponse update(Long id, Long userId, boolean canEditAll, RewardPunishmentRequest request) {
         var rp = repository.findById(id)
-            .orElseThrow(() -> new RuntimeException("记录不存在"));
+            .orElseThrow(() -> new BusinessException("记录不存在"));
         if (!canEditAll && !rp.getCreatorId().equals(userId)) {
-            throw new RuntimeException("只能修改自己创建的记录");
+            throw new BusinessException("只能修改自己创建的记录");
         }
         int baseScore = request.score() != null ? Math.abs(request.score()) : 0;
         applyRequest(rp, request, baseScore);
@@ -108,9 +109,9 @@ public class RewardPunishmentServiceImpl implements RewardPunishmentService {
     @Override
     public void delete(Long id, Long userId, boolean canEditAll) {
         var rp = repository.findById(id)
-            .orElseThrow(() -> new RuntimeException("记录不存在"));
+            .orElseThrow(() -> new BusinessException("记录不存在"));
         if (!canEditAll && !rp.getCreatorId().equals(userId)) {
-            throw new RuntimeException("只能删除自己创建的记录");
+            throw new BusinessException("只能删除自己创建的记录");
         }
         rp.setDeletedAt(LocalDateTime.now());
         repository.save(rp);

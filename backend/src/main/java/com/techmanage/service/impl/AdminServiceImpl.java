@@ -1,5 +1,6 @@
 package com.techmanage.service.impl;
 
+import com.techmanage.common.BusinessException;
 import com.techmanage.dto.CreateUserRequest;
 import com.techmanage.dto.DepartmentRequest;
 import com.techmanage.dto.IssueCategoryRequest;
@@ -39,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import com.techmanage.common.BusinessException;
 
 @Service
 public class AdminServiceImpl implements AdminService {
@@ -105,9 +107,9 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public UserResponse toggleUserEnabled(Long userId) {
         User user = userRepository.findById(userId)
-            .orElseThrow(() -> new RuntimeException("用户不存在"));
+            .orElseThrow(() -> new BusinessException("用户不存在"));
         if ("admin".equals(user.getUsername())) {
-            throw new RuntimeException("不能禁用超级管理员");
+            throw new BusinessException("不能禁用超级管理员");
         }
         user.setEnabled(!user.isEnabled());
         userRepository.save(user);
@@ -117,7 +119,7 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public UserResponse createUser(CreateUserRequest request) {
         if (userRepository.existsByUsername(request.username())) {
-            throw new RuntimeException("用户名已存在");
+            throw new BusinessException("用户名已存在");
         }
         User user = new User();
         user.setUsername(request.username());
@@ -134,7 +136,7 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public void resetPassword(Long userId, String password) {
         User user = userRepository.findById(userId)
-            .orElseThrow(() -> new RuntimeException("用户不存在"));
+            .orElseThrow(() -> new BusinessException("用户不存在"));
         user.setPassword(passwordEncoder.encode(password));
         userRepository.save(user);
     }
@@ -142,7 +144,7 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public UserResponse updateUser(Long userId, UpdateUserRequest request) {
         User user = userRepository.findById(userId)
-            .orElseThrow(() -> new RuntimeException("用户不存在"));
+            .orElseThrow(() -> new BusinessException("用户不存在"));
         user.setName(request.name());
         user.setDepartment(request.department());
         user.setPosition(request.position());
@@ -179,7 +181,7 @@ public class AdminServiceImpl implements AdminService {
     @Transactional
     public IssueCategory updateCategory(Long id, IssueCategoryRequest request) {
         IssueCategory category = categoryRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("分类不存在"));
+            .orElseThrow(() -> new BusinessException("分类不存在"));
         String oldName = category.getName();
         category.setName(request.name());
         category.setSortOrder(request.sortOrder());
@@ -214,7 +216,7 @@ public class AdminServiceImpl implements AdminService {
     @Transactional
     public Department updateDepartment(Long id, DepartmentRequest request) {
         Department department = departmentRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("部门不存在"));
+            .orElseThrow(() -> new BusinessException("部门不存在"));
         String oldName = department.getName();
         department.setName(request.name());
         department.setLeader(request.leader());
@@ -241,7 +243,7 @@ public class AdminServiceImpl implements AdminService {
     public SystemInfo createSystem(SystemInfoRequest request) {
         if (request.code() != null && !request.code().isBlank()) {
             if (systemInfoRepository.existsByCode(request.code())) {
-                throw new RuntimeException("系统编号 " + request.code() + " 已存在");
+                throw new BusinessException("系统编号 " + request.code() + " 已存在");
             }
         }
         SystemInfo system = new SystemInfo();
@@ -256,11 +258,11 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public SystemInfo updateSystem(Long id, SystemInfoRequest request) {
         SystemInfo system = systemInfoRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("系统不存在"));
+            .orElseThrow(() -> new BusinessException("系统不存在"));
         if (request.code() != null && !request.code().isBlank()) {
             var existing = systemInfoRepository.findByCode(request.code());
             if (existing.isPresent() && !existing.get().getId().equals(id)) {
-                throw new RuntimeException("系统编号 " + request.code() + " 已存在");
+                throw new BusinessException("系统编号 " + request.code() + " 已存在");
             }
         }
         system.setCode(request.code());
@@ -297,7 +299,7 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public Team updateTeam(Long id, TeamRequest request) {
         Team team = teamRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("团队不存在"));
+            .orElseThrow(() -> new BusinessException("团队不存在"));
         team.setName(request.name());
         team.setDepartment(request.department());
         team.setLeader(request.leader());
@@ -330,7 +332,7 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public IssueOccasion updateOccasion(Long id, IssueOccasionRequest request) {
         IssueOccasion occasion = occasionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("场合不存在"));
+                .orElseThrow(() -> new BusinessException("场合不存在"));
         occasion.setName(request.name());
         occasion.setType(request.type());
         occasion.setEnabled(request.enabled());

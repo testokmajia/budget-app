@@ -1,5 +1,6 @@
 package com.techmanage.service.impl;
 
+import com.techmanage.common.BusinessException;
 import com.techmanage.dto.ChangePasswordRequest;
 import com.techmanage.dto.LoginRequest;
 import com.techmanage.dto.LoginResponse;
@@ -51,11 +52,11 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public LoginResponse register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.username())) {
-            throw new RuntimeException("用户名已存在");
+            throw new BusinessException("用户名已存在");
         }
 
         Role userRole = roleRepository.findByCode("ROLE_USER")
-            .orElseThrow(() -> new RuntimeException("默认角色未初始化"));
+            .orElseThrow(() -> new BusinessException("默认角色未初始化"));
 
         User user = new User();
         user.setUsername(request.username());
@@ -73,19 +74,19 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void changePassword(Long userId, ChangePasswordRequest request) {
         var user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("用户不存在"));
+                .orElseThrow(() -> new BusinessException("用户不存在"));
 
         if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
-            throw new RuntimeException("当前密码错误");
+            throw new BusinessException("当前密码错误");
         }
         if (!request.newPassword().equals(request.confirmPassword())) {
-            throw new RuntimeException("两次输入的新密码不一致");
+            throw new BusinessException("两次输入的新密码不一致");
         }
         if (request.newPassword().length() < 8) {
-            throw new RuntimeException("新密码至少8位");
+            throw new BusinessException("新密码至少8位");
         }
         if (!request.newPassword().matches(".*[a-zA-Z].*") || !request.newPassword().matches(".*[0-9].*")) {
-            throw new RuntimeException("新密码必须包含字母和数字");
+            throw new BusinessException("新密码必须包含字母和数字");
         }
 
         user.setPassword(passwordEncoder.encode(request.newPassword()));

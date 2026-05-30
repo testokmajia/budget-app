@@ -14,4 +14,7 @@ public interface DepartmentReportService {
     List<DepartmentReportResponse> listDepartmentReports();
     byte[] exportWord(Long id);
     String exportHtml(Long id);
+
+    /** 查询当前周部门周报是否已审定（无需特殊权限） */
+    boolean isCurrentWeekFinalized();
 }

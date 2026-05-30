@@ -1,5 +1,6 @@
 package com.techmanage.service;
 
+import com.techmanage.common.BusinessException;
 import com.techmanage.dto.*;
 import com.techmanage.entity.QrLoginSession;
 import com.techmanage.entity.Role;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import com.techmanage.common.BusinessException;
 
 @Service
 public class QrLoginService {
@@ -56,7 +58,7 @@ public class QrLoginService {
 
     public QrSessionResponse pollStatus(String sessionId) {
         var session = sessionRepository.findBySessionId(sessionId)
-            .orElseThrow(() -> new RuntimeException("会话不存在"));
+            .orElseThrow(() -> new BusinessException("会话不存在"));
 
         if (session.getExpiresAt().isBefore(LocalDateTime.now())) {
             session.setStatus("EXPIRED");
@@ -87,7 +89,7 @@ public class QrLoginService {
     @Transactional
     public QrSessionResponse wechatLogin(String sessionId, String code) {
         var session = sessionRepository.findBySessionId(sessionId)
-            .orElseThrow(() -> new RuntimeException("会话不存在或已过期"));
+            .orElseThrow(() -> new BusinessException("会话不存在或已过期"));
 
         if (session.getExpiresAt().isBefore(LocalDateTime.now())) {
             session.setStatus("EXPIRED");
@@ -103,7 +105,7 @@ public class QrLoginService {
         if (existingUser.isPresent()) {
             User user = existingUser.get();
             if (!user.isEnabled()) {
-                throw new RuntimeException("账号已被禁用");
+                throw new BusinessException("账号已被禁用");
             }
 
             var roles = user.getRoles().stream().map(Role::getCode).toList();
@@ -131,7 +133,7 @@ public class QrLoginService {
     @Transactional
     public QrSessionResponse bindAndLogin(String sessionId, String username, String password) {
         var session = sessionRepository.findBySessionId(sessionId)
-            .orElseThrow(() -> new RuntimeException("会话不存在或已过期"));
+            .orElseThrow(() -> new BusinessException("会话不存在或已过期"));
 
         if (session.getExpiresAt().isBefore(LocalDateTime.now())) {
             session.setStatus("EXPIRED");
@@ -141,7 +143,7 @@ public class QrLoginService {
 
         String openId = session.getToken(); // openId was stored here during scan
         if (openId == null || openId.isBlank()) {
-            throw new RuntimeException("请先扫描二维码");
+            throw new BusinessException("请先扫描二维码");
         }
 
         // Verify username/password
@@ -150,7 +152,7 @@ public class QrLoginService {
         User user = (User) auth.getPrincipal();
 
         if (!user.isEnabled()) {
-            throw new RuntimeException("账号已被禁用");
+            throw new BusinessException("账号已被禁用");
         }
 
         // Bind openId to user
@@ -179,7 +181,7 @@ public class QrLoginService {
         String openId = wxSession.openId();
 
         var existingUser = userRepository.findByOpenId(openId)
-            .orElseThrow(() -> new RuntimeException("未绑定账号，请先在网页端扫码绑定"));
+            .orElseThrow(() -> new BusinessException("未绑定账号，请先在网页端扫码绑定"));
 
         if (!existingUser.isEnabled()) {
             throw new BadCredentialsException("账号已被禁用");

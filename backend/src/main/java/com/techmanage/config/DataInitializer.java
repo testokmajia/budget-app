@@ -66,7 +66,7 @@ public class DataInitializer implements CommandLineRunner {
             admin.setDepartment("信息科技部");
             admin.setRoles(Set.of(adminRole));
             userRepository.save(admin);
-            log.info("管理员账号已初始化");
+            log.info("管理员账号已初始化 (admin / 请登录后立即修改密码)");
         }
     }
 

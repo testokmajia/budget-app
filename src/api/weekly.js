@@ -9,6 +9,16 @@ export function getSmartDraft() { return request.get('/weekly-reports/smart-draf
 export function getSubmittedList() { return request.get('/weekly-reports/pending') }
 export function getSubmittedCount() { return request.get('/weekly-reports/pending/count') }
 
+// Aliases used by PendingApprovalTab
+export { getSubmittedList as getPendingList }
+export function approveReport(id, data) { return request.post(`/weekly-reports/${id}/approve`, data) }
+export function rejectReport(id, data) { return request.post(`/weekly-reports/${id}/reject`, data) }
+
+// New: team stats, remind, compare
+export function getTeamStats(weekStartDate) { return request.get('/weekly-reports/team-stats', { params: { weekStartDate } }) }
+export function remindMember(id) { return request.post(`/weekly-reports/${id}/remind`) }
+export function compareReports(from, to) { return request.get('/weekly-reports/compare', { params: { from, to } }) }
+
 // Team summaries
 export function mergeTeamSummary(data) { return request.post('/team-summaries/merge', data) }
 export function updateTeamSummary(id, data) { return request.put(`/team-summaries/${id}`, data) }
@@ -21,7 +31,11 @@ export function getTeamHistory(params) { return request.get('/weekly-reports/tea
 
 export function getAllHistory(params) { return request.get('/weekly-reports/all', { params }) }
 
+// Department team status
+export function getDeptTeamStatus() { return request.get('/weekly-reports/dept-team-status') }
+
 // Department reports
+export function getDeptFinalizedStatus() { return request.get('/department-reports/current-finalized') }
 export function mergeReports(data) { return request.post('/department-reports/merge', data) }
 export function getDeptReports() { return request.get('/department-reports') }
 export function getDeptReport(id) { return request.get(`/department-reports/${id}`) }

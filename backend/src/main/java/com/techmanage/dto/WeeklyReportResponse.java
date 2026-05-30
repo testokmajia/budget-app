@@ -8,6 +8,7 @@ public record WeeklyReportResponse(
     Long userId,
     String userName,
     String userDepartment,
+    String teamName,
     LocalDate weekStartDate,
     LocalDate weekEndDate,
     String doneWork,

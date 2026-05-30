@@ -1,6 +1,7 @@
 package com.techmanage.controller;
 
 import com.techmanage.common.ApiResponse;
+import com.techmanage.common.BusinessException;
 import com.techmanage.entity.Attachment;
 import com.techmanage.repository.AttachmentRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,6 +33,12 @@ public class FileUploadController {
 
     private static final long MAX_FILE_SIZE = 20 * 1024 * 1024;
 
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
+        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp",
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+        ".txt", ".csv", ".zip", ".rar", ".7z"
+    );
+
     public FileUploadController(@Value("${app.upload-dir:uploads}") String uploadDir,
                                  AttachmentRepository attachmentRepository) {
         this.uploadDir = Paths.get(uploadDir).toAbsolutePath().normalize();
@@ -39,19 +46,22 @@ public class FileUploadController {
         try {
             Files.createDirectories(this.uploadDir);
         } catch (IOException e) {
-            throw new RuntimeException("Cannot create upload directory", e);
+            throw new BusinessException("Cannot create upload directory", e);
         }
     }
 
     @PostMapping("/files/upload")
     public ApiResponse<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) throws IOException {
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw new RuntimeException("文件大小不能超过20MB");
+            throw new BusinessException("文件大小不能超过20MB");
         }
         String originalName = file.getOriginalFilename();
         String ext = "";
         if (originalName != null && originalName.contains(".")) {
-            ext = originalName.substring(originalName.lastIndexOf("."));
+            ext = originalName.substring(originalName.lastIndexOf(".")).toLowerCase();
+        }
+        if (!ext.isEmpty() && !ALLOWED_EXTENSIONS.contains(ext)) {
+            throw new BusinessException("不支持的文件类型: " + ext);
         }
         String storedName = UUID.randomUUID() + ext;
         Path target = uploadDir.resolve(storedName);
@@ -69,12 +79,15 @@ public class FileUploadController {
         List<Map<String, Object>> results = new ArrayList<>();
         for (MultipartFile file : files) {
             if (file.getSize() > MAX_FILE_SIZE) {
-                throw new RuntimeException("文件 " + file.getOriginalFilename() + " 大小超过20MB限制");
+                throw new BusinessException("文件 " + file.getOriginalFilename() + " 大小超过20MB限制");
             }
             String originalName = file.getOriginalFilename();
             String ext = "";
             if (originalName != null && originalName.contains(".")) {
-                ext = originalName.substring(originalName.lastIndexOf("."));
+                ext = originalName.substring(originalName.lastIndexOf(".")).toLowerCase();
+            }
+            if (!ext.isEmpty() && !ALLOWED_EXTENSIONS.contains(ext)) {
+                throw new BusinessException("不支持的文件类型: " + ext);
             }
             String storedName = UUID.randomUUID() + ext;
             Path target = uploadDir.resolve(storedName);
@@ -119,11 +132,11 @@ public class FileUploadController {
     @GetMapping("/attachments/{id}/download")
     public ResponseEntity<Resource> download(@PathVariable Long id) {
         var attachment = attachmentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("附件不存在"));
+                .orElseThrow(() -> new BusinessException("附件不存在"));
         String fileName = attachment.getFileName();
         String filePath = attachment.getFilePath();
         if (filePath == null || filePath.isBlank()) {
-            throw new RuntimeException("文件路径为空");
+            throw new BusinessException("文件路径为空");
         }
         // filePath is like "/uploads/uuid.ext"
         String storedName = filePath.substring(filePath.lastIndexOf('/') + 1);
@@ -132,10 +145,10 @@ public class FileUploadController {
         try {
             resource = new UrlResource(target.toUri().toURL());
         } catch (MalformedURLException e) {
-            throw new RuntimeException("文件路径无效", e);
+            throw new BusinessException("文件路径无效", e);
         }
         if (!resource.exists()) {
-            throw new RuntimeException("文件不存在");
+            throw new BusinessException("文件不存在");
         }
         String contentType = attachment.getContentType();
         if (contentType == null || contentType.isBlank()) {

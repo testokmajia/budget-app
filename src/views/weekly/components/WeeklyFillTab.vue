@@ -1,657 +1,589 @@
 <script setup>
-import { ref, watch, onMounted, inject } from 'vue'
+import { ref, watch, onMounted, inject, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { getCurrentWeekReport, saveReport, submitReport, getSmartDraft, getMyReports } from '@/api/weekly'
+import { getCurrentWeekReport, saveReport, submitReport, getSmartDraft, getDeptFinalizedStatus } from '@/api/weekly'
+import { parseItems, serializeItems, countByStatus } from '@/utils/workItemParser'
 
 const userStore = useUserStore()
 const refreshBadges = inject('refreshBadges', null)
+const loading = ref(false), submitting = ref(false)
+const submittedStatus = ref(''), reportId = ref(null), reportVersion = ref(1), weekLabel = ref('')
+const deptFinalized = ref(false)
+const doneItems = ref([{ item: '', progress: '', status: 'in-progress' }])
+const planItems = ref([{ item: '', progress: '', status: 'in-progress' }])
+const problems = ref(''), supportNeeded = ref('')
+const LS_KEY = `weekly_draft_v4_${userStore.user?.id}`
+const dc = () => countByStatus(doneItems.value)
+const pc = () => countByStatus(planItems.value)
 
-const loading = ref(false)
-const submittedStatus = ref('')
-const reportId = ref(null)
-const reportVersion = ref(1)
-const weekLabel = ref('')
+// Week date editing
+const weekStartInput = ref('')
+const weekEndInput = ref('')
 
-const doneItems = ref([{ item: '', progress: '' }])
-const planItems = ref([{ item: '', progress: '' }])
-const problems = ref('')
-const supportNeeded = ref('')
-
-const LS_KEY = `weekly_draft_${userStore.user?.id}`
-
-function parseItems(text) {
-  if (!text) return [{ item: '', progress: '' }]
-  const items = text.split('\n').filter(s => s.trim()).map(line => {
-    const idx = line.indexOf('|')
-    if (idx === -1) return { item: line, progress: '' }
-    return { item: line.substring(0, idx).trim(), progress: line.substring(idx + 1).trim() }
-  })
-  return items.length ? items : [{ item: '', progress: '' }]
+function getCurrentMonday() {
+  const now = new Date()
+  const day = now.getDay() || 7
+  const m = new Date(now)
+  m.setDate(now.getDate() - day + 1)
+  return m.toISOString().slice(0, 10)
+}
+function getCurrentSunday() {
+  const m = new Date(getCurrentMonday())
+  m.setDate(m.getDate() + 6)
+  return m.toISOString().slice(0, 10)
 }
 
-function serializeItems(items) {
-  return items.filter(s => s.item.trim()).map(s => `${s.item.trim()}|${s.progress.trim()}`).join('\n')
-}
+function isEditable() { return submittedStatus.value !== 'APPROVED' && !deptFinalized.value }
 
-function loadFromLocalStorage() {
+function loadLS() {
   try {
-    const raw = localStorage.getItem(LS_KEY)
-    if (raw) {
-      const data = JSON.parse(raw)
-      if (data.doneItems) doneItems.value = data.doneItems.length ? data.doneItems : [{ item: '', progress: '' }]
-      if (data.planItems) planItems.value = data.planItems.length ? data.planItems : [{ item: '', progress: '' }]
-      if (data.problems) problems.value = data.problems
-      if (data.supportNeeded) supportNeeded.value = data.supportNeeded
+    const d = JSON.parse(localStorage.getItem(LS_KEY))
+    if (d?.doneItems?.length) {
+      doneItems.value = d.doneItems
+      planItems.value = d.planItems || [{ item: '', progress: '', status: 'in-progress' }]
+      problems.value = d.problems || ''
+      supportNeeded.value = d.supportNeeded || ''
     }
-  } catch { /* ignore */ }
+  } catch {}
 }
 
-function saveToLocalStorage() {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify({
-      doneItems: doneItems.value,
-      planItems: planItems.value,
-      problems: problems.value,
-      supportNeeded: supportNeeded.value,
-    }))
-  } catch { /* ignore */ }
+function saveLS() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ doneItems: doneItems.value, planItems: planItems.value, problems: problems.value, supportNeeded: supportNeeded.value })) } catch {}
 }
 
-let saveTimer = null
+let t = null
 watch([doneItems, planItems, problems, supportNeeded], () => {
-  if (submittedStatus.value && submittedStatus.value !== 'DRAFT' && submittedStatus.value !== 'REJECTED') return
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(saveToLocalStorage, 2000)
+  if (submittedStatus.value === 'APPROVED' || deptFinalized.value) return
+  clearTimeout(t); t = setTimeout(saveLS, 2000)
 }, { deep: true })
 
-function addItem(list) {
-  list.push({ item: '', progress: '' })
+async function init() {
+  loading.value = true
+  try {
+    const [r, fs] = await Promise.all([
+      getCurrentWeekReport().catch(() => ({ data: null })),
+      getDeptFinalizedStatus().catch(() => ({ data: { finalized: false } }))
+    ])
+    reportId.value = r.data?.id; submittedStatus.value = r.data?.status || ''
+    reportVersion.value = r.data?.version || 1; weekLabel.value = r.data?.weekLabel || ''
+    weekStartInput.value = r.data?.weekStartDate || getCurrentMonday()
+    weekEndInput.value = r.data?.weekEndDate || getCurrentSunday()
+    deptFinalized.value = fs.data?.finalized === true
+    if (r.data && (r.data.doneWork || r.data.planWork)) {
+      doneItems.value = parseItems(r.data.doneWork); planItems.value = parseItems(r.data.planWork)
+      problems.value = r.data.problems || ''; supportNeeded.value = r.data.supportNeeded || ''
+    } else if (isEditable()) { loadLS() }
+  } catch { loadLS() } finally { loading.value = false }
 }
-function removeItem(list, index) {
-  if (list.length > 1) list.splice(index, 1)
-}
+onMounted(init)
 
-function onDragStart(e, index) {
-  e.dataTransfer.effectAllowed = 'move'
-  e.dataTransfer.setData('text/plain', String(index))
-}
-function onDragOver(e) {
-  e.preventDefault()
-  e.dataTransfer.dropEffect = 'move'
-}
-function onDrop(e, list) {
-  e.preventDefault()
-  const from = parseInt(e.dataTransfer.getData('text/plain'), 10)
-  const toEl = e.target.closest('.drag-row')
-  if (!toEl) return
-  const to = parseInt(toEl.dataset.index, 10)
-  if (from !== to && to >= 0 && to < list.length) {
-    const item = list.splice(from, 1)[0]
-    list.splice(to, 0, item)
-  }
-}
+function addItem(a) { a.push({ item: '', progress: '', status: 'in-progress' }) }
+function removeItem(a, i) { if (a.length <= 1) { a[0] = { item: '', progress: '', status: 'in-progress' }; return }; a.splice(i, 1) }
 
-function buildPayload() {
-  const monday = getMonday()
-  return {
-    weekStartDate: monday,
-    weekEndDate: getFriday(monday),
-    doneWork: serializeItems(doneItems.value),
-    planWork: serializeItems(planItems.value),
-    problems: problems.value,
-    supportNeeded: supportNeeded.value,
-  }
+function payload() {
+  return { doneWork: serializeItems(doneItems.value), planWork: serializeItems(planItems.value), problems: problems.value.trim(), supportNeeded: supportNeeded.value.trim() }
 }
 
 async function handleSave() {
   loading.value = true
   try {
-    const res = await saveReport(buildPayload())
-    submittedStatus.value = res.data?.status || 'DRAFT'
-    reportId.value = res.data?.id
-    reportVersion.value = res.data?.version || 1
-    localStorage.removeItem(LS_KEY)
-    ElMessage.success('草稿已保存')
-  } catch (e) {
-    ElMessage.error(e.response?.data?.error || '保存失败')
-  } finally {
-    loading.value = false
-  }
+    const r = await saveReport(payload()); reportId.value = r.data?.id
+    submittedStatus.value = 'DRAFT'; reportVersion.value = r.data?.version || 1
+    localStorage.removeItem(LS_KEY); ElMessage.success('草稿已保存')
+  } finally { loading.value = false }
 }
 
 async function handleSubmit() {
-  const confirmMsg = isDraft() ? '提交后组长将汇总组内周报，确认提交？' : '将生成新的周报版本并重新提交，确认？'
-  await ElMessageBox.confirm(confirmMsg, '提示', { type: 'warning' })
-  const payload = buildPayload()
-  if (!payload.doneWork && !payload.planWork) {
-    ElMessage.warning('请至少填写本周完成工作或下周工作计划')
-    return
-  }
-  loading.value = true
+  if (dc().total === 0 || (dc().total === 1 && !doneItems.value[0].item.trim())) { ElMessage.warning('请至少填写一项完成工作'); return }
+  const label = (submittedStatus.value === 'SUBMITTED' || submittedStatus.value === 'REJECTED') ? '确认重新提交本周报吗？' : '确认提交本周报吗？'
+  await ElMessageBox.confirm(label, '确认提交', { confirmButtonText: '确认提交', cancelButtonText: '再检查一下', type: 'warning' })
+  submitting.value = true
   try {
-    const res = await submitReport(payload)
-    submittedStatus.value = res.data?.status || 'SUBMITTED'
-    reportId.value = res.data?.id
-    reportVersion.value = res.data?.version || 1
-    localStorage.removeItem(LS_KEY)
-    refreshBadges?.()
-    ElMessage.success('已提交')
-  } catch (e) {
-    ElMessage.error(e.response?.data?.error || '提交失败')
-  } finally {
-    loading.value = false
-  }
+    const r = await submitReport(payload()); reportId.value = r.data?.id
+    submittedStatus.value = 'SUBMITTED'; reportVersion.value = r.data?.version || 1
+    localStorage.removeItem(LS_KEY); ElMessage.success('周报已提交'); refreshBadges?.()
+  } finally { submitting.value = false }
 }
 
 async function handleSmartDraft() {
+  loading.value = true
   try {
-    const res = await getSmartDraft()
-    const data = res.data
-    if (data && data.hasLastWeek && data.suggestedDoneWork) {
-      const items = parseItems(data.suggestedDoneWork)
-      if (items.length && items[0].item) {
-        doneItems.value = items
-        ElMessage.success('已从上周计划导入初稿，请确认调整后提交')
-        return
-      }
-    }
-    ElMessage.info('暂无上周计划数据')
-  } catch { ElMessage.info('暂无上周计划数据') }
+    const r = await getSmartDraft()
+    if (r.data?.hasLastWeek && r.data.suggestedDoneWork) { doneItems.value = parseItems(r.data.suggestedDoneWork); ElMessage.success('已根据上周计划生成初稿') }
+    else { ElMessage.info('未找到上周周报') }
+  } finally { loading.value = false }
 }
 
-function getMonday() {
-  const d = new Date()
-  const day = d.getDay() || 7
-  d.setDate(d.getDate() - day + 1)
-  return d.toISOString().split('T')[0]
+function statusClass(s) {
+  if (s === 'APPROVED') return 'ok'
+  if (s === 'SUBMITTED') return 'warn'
+  if (s === 'REJECTED') return 'bad'
+  return 'draft'
 }
-function getFriday(monday) {
-  const d = new Date(monday)
-  d.setDate(d.getDate() + 4)
-  return d.toISOString().split('T')[0]
+function statusText(s) {
+  const map = { APPROVED: '已审定', SUBMITTED: '已提交', REJECTED: '已驳回', DRAFT: '草稿', NOT_SUBMITTED: '未生成' }
+  return map[s] || '未生成'
 }
-function formatDateRange() {
-  const m = getMonday()
-  const f = getFriday(m)
-  weekLabel.value = `${m} (周一) ~ ${f} (周五)`
+function setStatus(item, s) { item.status = s }
+function dotClass(s) {
+  if (s === 'done') return 'green'
+  if (s === 'in-progress') return 'blue'
+  return 'red'
 }
-
-const statusLabels = {
-  'DRAFT': '草稿',
-  'SUBMITTED': '已提交',
-  'APPROVED': '已通过',
-  'REJECTED': '已驳回',
-}
-const statusTypes = {
-  'DRAFT': 'info',
-  'SUBMITTED': 'warning',
-  'APPROVED': 'success',
-  'REJECTED': 'danger',
-}
-
-async function init() {
-  formatDateRange()
-  try {
-    const res = await getCurrentWeekReport()
-    const data = res.data
-    if (data) {
-      reportId.value = data.id
-      submittedStatus.value = data.status || ''
-      reportVersion.value = data.version || 1
-      if (data.doneWork) {
-        doneItems.value = parseItems(data.doneWork)
-      }
-      if (data.planWork) {
-        planItems.value = parseItems(data.planWork)
-      }
-      if (data.problems) problems.value = data.problems
-      if (data.supportNeeded) supportNeeded.value = data.supportNeeded
-      if (data.weekStartDate) {
-        weekLabel.value = `${data.weekStartDate} (周一) ~ ${data.weekEndDate} (周五)`
-      }
-      if (data.status && data.status !== 'DRAFT' && data.status !== 'REJECTED') {
-        return
-      }
-    }
-  } catch { /* ignore */ }
-  loadFromLocalStorage()
-}
-
-const isDraft = () => !submittedStatus.value || submittedStatus.value === 'DRAFT' || submittedStatus.value === 'REJECTED'
-const showVersion = () => reportVersion.value > 1
-
-// Personal history
-const historyLoading = ref(false)
-const historyData = ref([])
-
-function formatHistoryDate(d) {
-  if (!d) return '-'
-  return typeof d === 'string' ? d.split('T')[0] : d
-}
-
-function formatHistoryDateTime(d) {
-  if (!d) return '-'
-  return typeof d === 'string' ? d.replace('T', ' ') : d
-}
-
-function historyParseLine(line) {
-  if (!line) return { item: '', progress: '' }
-  const idx = line.indexOf('|')
-  if (idx === -1) return { item: line, progress: '' }
-  return { item: line.substring(0, idx), progress: line.substring(idx + 1) }
-}
-
-function historyRenderItems(text) {
-  if (!text) return []
-  return text.split('\n').filter(s => s.trim()).map(historyParseLine)
-}
-
-async function fetchHistory() {
-  historyLoading.value = true
-  try {
-    const res = await getMyReports({})
-    historyData.value = res.data || []
-  } catch { historyData.value = [] }
-  finally { historyLoading.value = false }
-}
-
-const historyStatusLabels = { 'DRAFT': '草稿', 'SUBMITTED': '已提交', 'APPROVED': '已通过', 'REJECTED': '已驳回' }
-const historyStatusTypes = { 'DRAFT': 'info', 'SUBMITTED': 'warning', 'APPROVED': 'success', 'REJECTED': 'danger' }
-
-onMounted(() => {
-  init()
-  fetchHistory()
-})
 </script>
 
 <template>
-  <div v-loading="loading">
-    <div class="week-label">{{ weekLabel }}</div>
-
-    <div v-if="submittedStatus" class="status-bar">
-      <el-tag :type="statusTypes[submittedStatus] || 'info'" size="default">
-        {{ statusLabels[submittedStatus] || submittedStatus }}
-      </el-tag>
-      <span v-if="showVersion()" class="version-badge">V{{ reportVersion }}</span>
-    </div>
-
-    <div class="section">
-      <div class="section-header">
-        <h3>本周完成工作</h3>
-        <el-button :icon="Plus" size="small" @click="addItem(doneItems)">添加</el-button>
-      </div>
-      <div class="work-table">
-        <div class="work-header">
-          <span class="col-seq">序号</span>
-          <span class="col-item">事项</span>
-          <span class="col-progress">进展情况</span>
-          <span class="col-action"></span>
-        </div>
-        <div
-          class="work-body"
-          @dragover="onDragOver"
-          @drop="e => onDrop(e, doneItems)"
-        >
-          <div
-            v-for="(row, i) in doneItems"
-            :key="i"
-            class="drag-row"
-            :data-index="i"
-            draggable="true"
-            @dragstart="e => onDragStart(e, i)"
-          >
-            <span class="col-seq">
-              <span class="drag-handle">⠿</span>
-              <span>{{ i + 1 }}</span>
-            </span>
-            <el-input
-              v-model="row.item"
-              class="col-item"
-                            placeholder="事项（30字以内）"
-              maxlength="30"
-            />
-            <el-input
-              v-model="row.progress"
-              class="col-progress"
-                            placeholder="进展情况"
-            />
-            <span class="col-action">
-              <el-button
-                v-if="doneItems.length > 1"
-                :icon="Delete"
-                size="small"
-                type="danger"
-                text
-                @click="removeItem(doneItems, i)"
-              />
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-header">
-        <h3>下周工作计划</h3>
-        <el-button :icon="Plus" size="small" @click="addItem(planItems)">添加</el-button>
-      </div>
-      <div class="work-table">
-        <div class="work-header">
-          <span class="col-seq">序号</span>
-          <span class="col-item">事项</span>
-          <span class="col-progress">进展情况</span>
-          <span class="col-action"></span>
-        </div>
-        <div
-          class="work-body"
-          @dragover="onDragOver"
-          @drop="e => onDrop(e, planItems)"
-        >
-          <div
-            v-for="(row, i) in planItems"
-            :key="i"
-            class="drag-row"
-            :data-index="i"
-            draggable="true"
-            @dragstart="e => onDragStart(e, i)"
-          >
-            <span class="col-seq">
-              <span class="drag-handle">⠿</span>
-              <span>{{ i + 1 }}</span>
-            </span>
-            <el-input
-              v-model="row.item"
-              class="col-item"
-                            placeholder="事项（30字以内）"
-              maxlength="30"
-            />
-            <el-input
-              v-model="row.progress"
-              class="col-progress"
-                            placeholder="进展情况"
-            />
-            <span class="col-action">
-              <el-button
-                v-if="planItems.length > 1"
-                :icon="Delete"
-                size="small"
-                type="danger"
-                text
-                @click="removeItem(planItems, i)"
-              />
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <h3>遇到的问题</h3>
-      <el-input
-        v-model="problems"
-        type="textarea"
-        :rows="3"
-                placeholder="需要协调的事项或遇到的困难（选填）"
-        maxlength="500"
-        show-word-limit
-      />
-    </div>
-
-    <div class="section">
-      <h3>需要支持</h3>
-      <el-input
-        v-model="supportNeeded"
-        type="textarea"
-        :rows="3"
-                placeholder="需要上级或跨组协调的事项（选填）"
-        maxlength="500"
-        show-word-limit
-      />
-    </div>
-
-    <div class="actions">
-      <el-button @click="handleSave" :loading="loading">保存草稿</el-button>
-      <el-button type="primary" @click="handleSmartDraft">智能初稿</el-button>
-      <el-button type="success" @click="handleSubmit" :loading="loading">{{ isDraft() ? '提交周报' : '重新提交' }}</el-button>
-    </div>
-
-    <!-- Personal history -->
-    <div class="history-section" v-if="historyData.length > 0">
-      <h3 class="history-heading">我的历史周报</h3>
-      <el-table :data="historyData" v-loading="historyLoading" size="small" stripe>
-        <el-table-column label="周期" width="200">
-          <template #default="{ row }">
-            {{ formatHistoryDate(row.weekStartDate) }} ~ {{ formatHistoryDate(row.weekEndDate) }}
+  <div v-loading="loading" class="fill-root">
+    <!-- ===== 头部 ===== -->
+    <div class="fill-hd">
+      <div class="fill-hd-l">
+        <div class="fill-sub">
+          <template v-if="isEditable()">
+            <el-date-picker v-model="weekStartInput" type="date" placeholder="周一" value-format="YYYY-MM-DD" size="small" style="width:130px;" />
+            <span style="color:var(--gray-300);">~</span>
+            <el-date-picker v-model="weekEndInput" type="date" placeholder="周日" value-format="YYYY-MM-DD" size="small" style="width:130px;" />
           </template>
-        </el-table-column>
-        <el-table-column label="版本" width="60" align="center">
-          <template #default="{ row }">V{{ row.version || 1 }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag :type="historyStatusTypes[row.status] || 'info'" size="small">
-              {{ historyStatusLabels[row.status] || row.status }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="提交时间" width="160">
-          <template #default="{ row }">{{ formatHistoryDateTime(row.submittedAt) }}</template>
-        </el-table-column>
-        <el-table-column type="expand">
-          <template #default="{ row }">
-            <div class="history-expand">
-              <div v-if="row.doneWork" class="expand-section">
-                <h4>本周完成工作：</h4>
-                <table class="work-table" v-if="historyRenderItems(row.doneWork).length">
-                  <thead><tr><th style="width:40px">序号</th><th style="width:200px">事项</th><th>进展情况</th></tr></thead>
-                  <tbody>
-                    <tr v-for="(it, i) in historyRenderItems(row.doneWork)" :key="i">
-                      <td style="text-align:center">{{ i + 1 }}</td>
-                      <td>{{ it.item }}</td>
-                      <td>{{ it.progress || '-' }}</td>
-                    </tr>
-                  </tbody>
-                </table>
+          <span v-else style="font-size:14px;font-weight:600;color:var(--gray-700);">{{ weekLabel }}</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span v-if="submittedStatus" class="fill-tag" :class="statusClass(submittedStatus)">
+          <span class="fill-tag-dot"></span>{{ statusText(submittedStatus) }}
+        </span>
+        <el-tag v-if="reportVersion > 1" size="small" style="font-weight:600;">V{{ reportVersion }}</el-tag>
+        <template v-if="isEditable()">
+          <el-button size="small" @click="handleSave" :loading="loading">💾 保存草稿</el-button>
+          <el-button size="small" @click="handleSmartDraft" :loading="loading">🤖 智能初稿</el-button>
+          <el-button size="small" type="primary" @click="handleSubmit" :loading="loading || submitting">
+            {{ (submittedStatus === 'SUBMITTED' || submittedStatus === 'REJECTED') ? '📤 重新提交' : '📤 提交周报' }}
+          </el-button>
+        </template>
+      </div>
+    </div>
+
+    <!-- ===== 统计条 ===== -->
+    <div v-if="submittedStatus" class="fill-statbar">
+      <div class="fill-stat theme-green">
+        <div class="fill-stat-val">{{ dc().done }}</div>
+        <div class="fill-stat-lbl">已完成</div>
+      </div>
+      <div class="fill-stat theme-blue">
+        <div class="fill-stat-val">{{ dc().inProgress }}</div>
+        <div class="fill-stat-lbl">进行中</div>
+      </div>
+      <div class="fill-stat theme-red">
+        <div class="fill-stat-val">{{ dc().blocked }}</div>
+        <div class="fill-stat-lbl">受阻</div>
+      </div>
+      <div class="fill-stat theme-gray">
+        <div class="fill-stat-val">{{ pc().total }}</div>
+        <div class="fill-stat-lbl">计划</div>
+      </div>
+    </div>
+
+    <!-- ===== 内容区 ===== -->
+    <div class="fill-bd">
+      <!-- 本周完成工作 -->
+      <div class="fill-sec">
+        <div class="fill-sec-hd">
+          <div class="fill-sec-bar green"></div>
+          <span class="fill-sec-title">本周完成工作</span>
+          <span class="fill-sec-note">{{ dc().total }} 项</span>
+        </div>
+
+        <div v-if="doneItems.length" class="fill-wi-list">
+          <div v-for="(item, i) in doneItems" :key="'d'+i" class="fill-wi-item" :class="{ 'is-empty': !item.item && isEditable() }">
+            <div class="fill-wi-dot" :class="dotClass(item.status)"></div>
+            <div class="fill-wi-body">
+              <div class="fill-wi-row1">
+                <input v-if="isEditable()" v-model="item.item" placeholder="输入事项描述…" maxlength="50" class="fill-input" />
+                <span v-else class="fill-readonly">{{ item.item || '(空)' }}</span>
+                <!-- 状态切换 -->
+                <span v-if="isEditable()" class="fill-wi-actions">
+                  <button class="fill-pill" :class="{ on: item.status === 'done' }" @click="setStatus(item, 'done')">已完成</button>
+                  <button class="fill-pill" :class="{ on: item.status === 'in-progress' }" @click="setStatus(item, 'in-progress')">进行中</button>
+                  <button class="fill-pill" :class="{ on: item.status === 'blocked' }" @click="setStatus(item, 'blocked')">受阻</button>
+                  <button class="fill-del" @click="removeItem(doneItems, i)" title="删除">×</button>
+                </span>
               </div>
-              <div v-if="row.planWork" class="expand-section">
-                <h4>下周工作计划：</h4>
-                <table class="work-table" v-if="historyRenderItems(row.planWork).length">
-                  <thead><tr><th style="width:40px">序号</th><th style="width:200px">事项</th><th>进展情况</th></tr></thead>
-                  <tbody>
-                    <tr v-for="(it, i) in historyRenderItems(row.planWork)" :key="i">
-                      <td style="text-align:center">{{ i + 1 }}</td>
-                      <td>{{ it.item }}</td>
-                      <td>{{ it.progress || '-' }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div v-if="row.problems" class="expand-section">
-                <h4>遇到的问题：</h4>
-                <p>{{ row.problems }}</p>
-              </div>
-              <div v-if="row.supportNeeded" class="expand-section">
-                <h4>需要支持：</h4>
-                <p>{{ row.supportNeeded }}</p>
-              </div>
+              <input v-if="isEditable()" v-model="item.progress" placeholder="进展说明（选填）…" maxlength="100" class="fill-input fill-input-prog" />
+              <span v-else-if="item.progress" class="fill-readonly-prog">{{ item.progress }}</span>
             </div>
-          </template>
-        </el-table-column>
-      </el-table>
+          </div>
+        </div>
+        <button v-if="isEditable()" class="fill-add" @click="addItem(doneItems)">+ 添加工作项</button>
+      </div>
+
+      <!-- 下周工作计划 -->
+      <div class="fill-sec">
+        <div class="fill-sec-hd">
+          <div class="fill-sec-bar blue"></div>
+          <span class="fill-sec-title">下周工作计划</span>
+          <span class="fill-sec-note">{{ pc().total }} 项</span>
+        </div>
+
+        <div v-if="planItems.length" class="fill-wi-list">
+          <div v-for="(item, i) in planItems" :key="'p'+i" class="fill-wi-item" :class="{ 'is-empty': !item.item && isEditable() }">
+            <div class="fill-wi-dot" :class="dotClass(item.status)"></div>
+            <div class="fill-wi-body">
+              <div class="fill-wi-row1">
+                <input v-if="isEditable()" v-model="item.item" placeholder="输入计划事项…" maxlength="50" class="fill-input" />
+                <span v-else class="fill-readonly">{{ item.item || '(空)' }}</span>
+                <span v-if="isEditable()" class="fill-wi-actions">
+                  <button class="fill-pill" :class="{ on: item.status === 'done' }" @click="setStatus(item, 'done')">已完成</button>
+                  <button class="fill-pill" :class="{ on: item.status === 'in-progress' }" @click="setStatus(item, 'in-progress')">进行中</button>
+                  <button class="fill-del" @click="removeItem(planItems, i)" title="删除">×</button>
+                </span>
+              </div>
+              <input v-if="isEditable()" v-model="item.progress" placeholder="预期目标（选填）…" maxlength="100" class="fill-input fill-input-prog" />
+              <span v-else-if="item.progress" class="fill-readonly-prog">{{ item.progress }}</span>
+            </div>
+          </div>
+        </div>
+        <button v-if="isEditable()" class="fill-add" @click="addItem(planItems)">+ 添加计划项</button>
+      </div>
+
+      <!-- 遇到的问题 -->
+      <div class="fill-sec">
+        <div class="fill-sec-hd">
+          <div class="fill-sec-bar red"></div>
+          <span class="fill-sec-title">遇到的问题</span>
+          <span class="fill-sec-note">选填</span>
+        </div>
+        <textarea v-if="isEditable()" v-model="problems" class="fill-textarea" placeholder="需要协调的事项或遇到的困难…" maxlength="500" rows="3"></textarea>
+        <div v-else class="fill-prose fill-prose-red" v-text="problems || '无'"></div>
+      </div>
+
+      <!-- 需要支持 -->
+      <div class="fill-sec">
+        <div class="fill-sec-hd">
+          <div class="fill-sec-bar amber"></div>
+          <span class="fill-sec-title">需要支持</span>
+          <span class="fill-sec-note">选填</span>
+        </div>
+        <textarea v-if="isEditable()" v-model="supportNeeded" class="fill-textarea" placeholder="需要上级或跨组协调的事项…" maxlength="500" rows="3"></textarea>
+        <div v-else class="fill-prose fill-prose-amber" v-text="supportNeeded || '无'"></div>
+      </div>
+
+      <!-- 底部提示 -->
+      <div v-if="!isEditable()" style="text-align:center;padding:20px;color:var(--gray-300);font-size:13px;">
+        {{ deptFinalized ? '🔒 本周部门周报已审定，不允许再修改' : '✅ 本周报已审批通过，不再支持修改' }}
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.week-label {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 12px;
-  padding: 10px 16px;
-  background: #f0f2f5;
-  border-radius: 6px;
+/* ===== 根容器 ===== */
+.fill-root {
+  max-width: 780px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  overflow: hidden;
+  border: 1px solid #eee;
 }
-.status-bar {
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.version-badge {
-  font-size: 12px;
-  color: #909399;
-  background: #f0f2f5;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 500;
-}
-.section {
-  margin-bottom: 20px;
-}
-.section h3 {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  color: #303133;
-}
-.section-header {
+
+/* ===== 头部 ===== */
+.fill-hd {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+}
+.fill-sub {
+  font-size: 13px;
+  color: var(--gray-300);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 状态标签 */
+.fill-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.fill-tag-dot { width: 6px; height: 6px; border-radius: 50%; }
+.fill-tag.ok { background: #ecfdf5; color: #059669; } .fill-tag.ok .fill-tag-dot { background: #0abf5b; }
+.fill-tag.warn { background: #fffbeb; color: #d97706; } .fill-tag.warn .fill-tag-dot { background: #f59e0b; }
+.fill-tag.draft { background: #f3f4f6; color: #6b7280; } .fill-tag.draft .fill-tag-dot { background: #9ca3af; }
+.fill-tag.bad { background: #fef2f2; color: #dc2626; } .fill-tag.bad .fill-tag-dot { background: #e54545; }
+
+/* ===== 统计条 ===== */
+.fill-statbar {
+  display: flex;
+  border-bottom: 1px solid #eee;
+}
+.fill-stat {
+  flex: 1;
+  text-align: center;
+  padding: 12px 8px;
+  position: relative;
+}
+.fill-stat + .fill-stat::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 25%;
+  height: 50%;
+  width: 1px;
+  background: #eee;
+}
+.fill-stat-val {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+.fill-stat-lbl {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 3px;
+}
+.theme-green .fill-stat-val, .theme-green .fill-stat-lbl { color: #0abf5b; }
+.theme-blue  .fill-stat-val, .theme-blue  .fill-stat-lbl { color: var(--brand); }
+.theme-red   .fill-stat-val, .theme-red   .fill-stat-lbl { color: #e54545; }
+.theme-gray  .fill-stat-val, .theme-gray  .fill-stat-lbl { color: var(--gray-300); }
+
+/* ===== 内容区 ===== */
+.fill-bd {
+  padding: 16px 20px;
+}
+
+/* 区块 */
+.fill-sec {
+  margin-bottom: 20px;
+}
+.fill-sec:last-child { margin-bottom: 0; }
+.fill-sec-hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
 }
-.section-header h3 {
-  margin: 0;
+.fill-sec-bar {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.fill-sec-bar.green { background: #0abf5b; }
+.fill-sec-bar.blue  { background: var(--brand); }
+.fill-sec-bar.red   { background: #e54545; }
+.fill-sec-bar.amber { background: #f59e0b; }
+.fill-sec-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+.fill-sec-note {
+  font-size: 12px;
+  color: var(--gray-300);
+  font-weight: 400;
 }
 
-.work-table {
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  overflow: hidden;
-}
-.work-header {
-  display: flex;
-  align-items: center;
-  background: #f5f7fa;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #606266;
-  border-bottom: 1px solid #e4e7ed;
-}
-.work-body {
+/* 工作项列表 */
+.fill-wi-list {
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
-.drag-row {
-  display: flex;
-  align-items: center;
-  padding: 6px 12px;
-  gap: 8px;
-  border-bottom: 1px solid #ebeef5;
-  transition: background 0.15s;
-}
-.drag-row:last-child {
-  border-bottom: none;
-}
-.drag-row:hover {
-  background: #fafafa;
-}
-
-.col-seq {
-  width: 60px;
-  flex-shrink: 0;
-  text-align: center;
-  font-size: 13px;
-  color: #909399;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
-.col-item {
-  width: 200px;
-  flex-shrink: 0;
-}
-.col-progress {
-  flex: 1;
-  min-width: 0;
-}
-.col-action {
-  width: 40px;
-  flex-shrink: 0;
-  display: flex;
-  justify-content: center;
-}
-
-.drag-handle {
-  cursor: grab;
-  color: #c0c4cc;
-  font-size: 14px;
-  user-select: none;
-  line-height: 1;
-}
-
-.actions {
+.fill-wi-item {
   display: flex;
   gap: 10px;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid #ebeef5;
+  padding: 10px 12px;
+  background: var(--gray-50);
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.fill-wi-item:hover { background: #fff; border-color: #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+.fill-wi-item.is-empty { border-color: #e5e7eb; background: #fff; }
+
+.fill-wi-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 7px;
+  flex-shrink: 0;
+}
+.fill-wi-dot.green { background: #0abf5b; }
+.fill-wi-dot.blue  { background: var(--brand); }
+.fill-wi-dot.red   { background: #e54545; }
+
+.fill-wi-body { flex: 1; min-width: 0; }
+.fill-wi-row1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.history-section {
-  margin-top: 32px;
-  border-top: 2px solid #e4e7ed;
-  padding-top: 20px;
-}
-
-.history-heading {
-  font-size: 15px;
-  color: #303133;
-  margin: 0 0 12px 0;
-}
-
-.history-expand {
-  padding: 8px 20px;
-  background: #f7f8fa;
-  font-size: 13px;
-}
-
-.expand-section h4 {
-  margin: 8px 0 4px 0;
-  font-size: 13px;
-}
-
-.expand-section:first-child h4 {
-  margin-top: 0;
-}
-
-.expand-section p {
-  margin: 0;
-  line-height: 1.6;
-}
-
-.expand-section .work-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  margin-top: 4px;
-}
-
-.expand-section .work-table th,
-.expand-section .work-table td {
-  border: 1px solid #e4e7ed;
-  padding: 6px 10px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.expand-section .work-table th {
-  background: #f5f7fa;
+/* 输入框 */
+.fill-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 14px;
   font-weight: 600;
-  color: #606266;
+  color: var(--gray-500);
+  padding: 2px 0;
+  outline: none;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.fill-input::placeholder { color: var(--gray-300); font-weight: 400; }
+.fill-input:focus { color: var(--gray-900); }
+.fill-input-prog {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--gray-300);
+  padding-left: 1px;
+}
+.fill-input-prog::before {
+  content: '';
+  display: inline-block;
+  width: 1px;
+  height: 10px;
+  background: var(--gray-200);
+  margin-right: 6px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+.fill-readonly {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-500);
+  padding: 2px 0;
+}
+.fill-readonly-prog {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--gray-400);
+  line-height: 1.6;
+  padding-left: 1px;
+}
+.fill-readonly-prog::before {
+  content: '';
+  display: inline-block;
+  width: 1px;
+  height: 10px;
+  background: var(--gray-200);
+  margin-right: 6px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+/* 状态切换药丸 */
+.fill-wi-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.fill-pill {
+  border: 1px solid var(--gray-200);
+  background: #fff;
+  color: var(--gray-300);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.fill-pill:hover { border-color: #9ca3af; color: var(--gray-500); }
+.fill-pill.on { color: #fff; border-color: transparent; }
+.fill-pill.on:nth-child(1) { background: #0abf5b; border-color: #0abf5b; color: #fff; }
+.fill-pill.on:nth-child(2) { background: var(--brand); border-color: var(--brand); color: #fff; }
+.fill-pill.on:nth-child(3) { background: #e54545; border-color: #e54545; color: #fff; }
+
+.fill-del {
+  border: none;
+  background: transparent;
+  color: var(--gray-300);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.fill-del:hover { color: #e54545; }
+
+/* 添加按钮 */
+.fill-add {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px dashed var(--gray-200);
+  background: transparent;
+  color: var(--gray-300);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.fill-add:hover { border-color: var(--brand); color: var(--brand); background: #f8faff; }
+
+/* 文本框 */
+.fill-textarea {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--gray-500);
+  resize: vertical;
+  outline: none;
+  font-family: inherit;
+  line-height: 1.6;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.fill-textarea::placeholder { color: var(--gray-300); }
+.fill-textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(0,110,255,.1); }
+
+/* 富文本只读 */
+.fill-prose {
+  padding: 14px 16px;
+  background: var(--gray-50);
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--gray-500);
+  white-space: pre-wrap;
+}
+.fill-prose-red {
+  background: #fef2f2;
+  color: #991b1b;
+  border-left: 3px solid #e54545;
+}
+.fill-prose-amber {
+  background: #fffbeb;
+  color: #92400e;
+  border-left: 3px solid #f59e0b;
 }
 </style>

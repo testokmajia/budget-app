@@ -26,6 +26,9 @@ public interface WeeklyReportRepository extends JpaRepository<WeeklyReport, Long
     @Query("SELECT r FROM WeeklyReport r WHERE r.userId IN ?1 AND r.status = 'SUBMITTED' ORDER BY r.submittedAt ASC")
     List<WeeklyReport> findSubmittedByUserIds(List<Long> userIds);
 
+    @Query("SELECT r FROM WeeklyReport r WHERE r.userId IN ?1 AND r.status IN ('SUBMITTED', 'APPROVED') ORDER BY r.submittedAt ASC")
+    List<WeeklyReport> findSubmittedOrApprovedByUserIds(List<Long> userIds);
+
     @Query("SELECT r FROM WeeklyReport r WHERE r.userId IN ?1 AND r.weekStartDate = ?2 AND r.status = 'SUBMITTED'")
     List<WeeklyReport> findSubmittedByUserIdsAndWeekStartDate(List<Long> userIds, LocalDate weekStartDate);
 

@@ -1,5 +1,6 @@
 package com.techmanage.service.impl;
 
+import com.techmanage.common.BusinessException;
 import com.techmanage.dto.ChecklistRequest;
 import com.techmanage.dto.ChecklistResponse;
 import com.techmanage.entity.Checklist;
@@ -46,7 +47,7 @@ public class ChecklistServiceImpl implements ChecklistService {
     @Override
     public ChecklistResponse getById(Long id, Long userId) {
         var checklist = checklistRepository.findByIdAndUserId(id, userId)
-            .orElseThrow(() -> new RuntimeException("清单不存在"));
+            .orElseThrow(() -> new BusinessException("清单不存在"));
         return toResponse(checklist);
     }
 
@@ -62,7 +63,7 @@ public class ChecklistServiceImpl implements ChecklistService {
     @Override
     public ChecklistResponse update(Long id, Long userId, ChecklistRequest request) {
         var checklist = checklistRepository.findByIdAndUserId(id, userId)
-            .orElseThrow(() -> new RuntimeException("清单不存在"));
+            .orElseThrow(() -> new BusinessException("清单不存在"));
         applyRequest(checklist, request);
         checklistRepository.save(checklist);
         return toResponse(checklist);
@@ -71,7 +72,7 @@ public class ChecklistServiceImpl implements ChecklistService {
     @Override
     public ChecklistResponse complete(Long id, Long userId, LocalDate actualDate) {
         var checklist = checklistRepository.findByIdAndUserId(id, userId)
-            .orElseThrow(() -> new RuntimeException("清单不存在"));
+            .orElseThrow(() -> new BusinessException("清单不存在"));
         checklist.setStatus("已完成");
         checklist.setActualDate(actualDate != null ? actualDate : LocalDate.now());
         checklistRepository.save(checklist);
@@ -81,7 +82,7 @@ public class ChecklistServiceImpl implements ChecklistService {
     @Override
     public void delete(Long id, Long userId) {
         var checklist = checklistRepository.findByIdAndUserId(id, userId)
-            .orElseThrow(() -> new RuntimeException("清单不存在"));
+            .orElseThrow(() -> new BusinessException("清单不存在"));
         checklist.setDeletedAt(LocalDateTime.now());
         checklistRepository.save(checklist);
     }

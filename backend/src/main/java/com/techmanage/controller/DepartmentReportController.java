@@ -27,6 +27,14 @@ public class DepartmentReportController {
         this.deptReportService = deptReportService;
     }
 
+    /**
+     * 查询当前周部门周报是否已审定（所有登录用户可访问）
+     */
+    @GetMapping("/current-finalized")
+    public ApiResponse<Map<String, Boolean>> isCurrentWeekFinalized() {
+        return ApiResponse.ok(Map.of("finalized", deptReportService.isCurrentWeekFinalized()));
+    }
+
     @PostMapping("/merge")
     @PreAuthorize("hasAnyRole('ROLE_CLERK', 'ROLE_ADMIN')")
     public ApiResponse<DepartmentReportResponse> mergeAi(Authentication auth,

@@ -31,7 +31,9 @@ request.interceptors.response.use(
       userStore.logout()
       router.push('/login')
     }
-    ElMessage.error(error.message || '网络错误')
+    // 优先使用后端返回的中文错误消息，而非 axios 默认的英文 HTTP 状态描述
+    const msg = error.response?.data?.error || error.message || '网络错误'
+    ElMessage.error(msg)
     return Promise.reject(error)
   },
 )

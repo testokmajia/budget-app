@@ -45,9 +45,35 @@ const routes = [
       },
       {
         path: 'weekly',
-        name: 'Weekly',
         component: () => import('@/views/weekly/WeeklyView.vue'),
+        redirect: '/weekly/fill',
         meta: { title: '工作周报' },
+        children: [
+          {
+            path: 'fill',
+            name: 'WeeklyFill',
+            component: () => import('@/views/weekly/components/WeeklyFillTab.vue'),
+            meta: { title: '填写周报' },
+          },
+          {
+            path: 'team',
+            name: 'WeeklyTeam',
+            component: () => import('@/views/weekly/components/TeamWeeklyTab.vue'),
+            meta: { title: '团队周报' },
+          },
+          {
+            path: 'dept',
+            name: 'WeeklyDept',
+            component: () => import('@/views/weekly/components/DeptReportTab.vue'),
+            meta: { title: '部门汇总', roles: ['ROLE_CLERK', 'ROLE_ADMIN'] },
+          },
+          {
+            path: 'history',
+            name: 'WeeklyHistory',
+            component: () => import('@/views/weekly/components/HistoryTab.vue'),
+            meta: { title: '历史记录' },
+          },
+        ],
       },
       {
         path: 'admin',

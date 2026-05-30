@@ -1,5 +1,6 @@
 package com.techmanage.service.impl;
 
+import com.techmanage.common.BusinessException;
 import com.techmanage.dto.TeamInfo;
 import com.techmanage.dto.TeamSummaryRequest;
 import com.techmanage.dto.TeamSummaryResponse;
@@ -14,7 +15,9 @@ import com.techmanage.repository.UserRepository;
 import com.techmanage.repository.WeeklyReportRepository;
 import com.techmanage.service.AiService;
 import com.techmanage.service.TeamSummaryService;
+import com.techmanage.util.TeamUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -45,11 +48,11 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
     @Override
     public TeamSummaryResponse mergeAi(Long leaderId, TeamSummaryRequest request) {
         User leader = userRepository.findById(leaderId)
-            .orElseThrow(() -> new RuntimeException("用户不存在"));
+            .orElseThrow(() -> new BusinessException("用户不存在"));
 
         List<Team> teams = teamRepository.findByLeader(leader.getName());
         if (teams.isEmpty()) {
-            throw new RuntimeException("您不是组长，无法汇总组内周报");
+            throw new BusinessException("您不是组长，无法汇总组内周报");
         }
 
         // Collect member IDs from ALL teams the leader manages
@@ -64,7 +67,7 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
         }
 
         if (memberNames.isEmpty()) {
-            throw new RuntimeException("您的团队暂无成员，请先在团队管理中配置");
+            throw new BusinessException("您的团队暂无成员，请先在团队管理中配置");
         }
 
         List<Long> memberIds = userRepository.findByNameIn(new ArrayList<>(memberNames)).stream()
@@ -72,27 +75,41 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
             .toList();
 
         if (memberIds.isEmpty()) {
-            throw new RuntimeException("团队成员账号未找到，请检查团队管理中的成员姓名");
+            throw new BusinessException("团队成员账号未找到，请检查团队管理中的成员姓名");
         }
 
         // Get all submitted reports from team members
+        // Find all submitted or approved reports from team members (not just SUBMITTED)
         List<WeeklyReport> allSubmitted = weeklyReportRepository
-            .findSubmittedByUserIds(memberIds);
+            .findSubmittedOrApprovedByUserIds(memberIds);
 
         if (allSubmitted.isEmpty()) {
-            throw new RuntimeException("组内暂无已提交的周报");
+            throw new BusinessException("组内暂无已提交的周报");
         }
 
-        // Find the latest week that has submitted reports
-        LocalDate latestWeek = allSubmitted.stream()
+        // 确定目标周：优先使用请求中的日期，未提供则查找最新有报告的周
+        // 如果请求的周没有报告，自动回退到最新有报告的周，确保 AI 汇总总能生成
+        final LocalDate requestedWeek = request.weekStartDate();
+        final LocalDate latestWeek = allSubmitted.stream()
             .map(WeeklyReport::getWeekStartDate)
             .max(LocalDate::compareTo)
-            .orElseThrow(() -> new RuntimeException("无法确定周报日期"));
+            .orElseThrow(() -> new BusinessException("无法确定周报日期"));
 
-        // Filter to the latest week
-        final LocalDate targetWeek = latestWeek;
+        LocalDate targetWeek;
+        if (requestedWeek != null) {
+            // 检查请求的周是否有报告
+            final LocalDate rw = requestedWeek;
+            boolean hasReports = allSubmitted.stream()
+                .anyMatch(r -> rw.equals(r.getWeekStartDate()));
+            targetWeek = hasReports ? requestedWeek : latestWeek;
+        } else {
+            targetWeek = latestWeek;
+        }
+
+        // 筛选目标周的报告
+        final LocalDate filterWeek = targetWeek;
         List<WeeklyReport> reports = allSubmitted.stream()
-            .filter(r -> targetWeek.equals(r.getWeekStartDate()))
+            .filter(r -> filterWeek.equals(r.getWeekStartDate()))
             .collect(Collectors.toList());
 
         // Use requested team name or default to first team's name
@@ -108,7 +125,7 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
         }
 
         if (reports.isEmpty()) {
-            throw new RuntimeException("本周组内暂无已提交的周报");
+            throw new BusinessException("本周组内暂无已提交的周报");
         }
 
         // Keep only latest version per user
@@ -155,12 +172,12 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
     @Override
     public TeamSummaryResponse update(Long id, Long leaderId, String editedContent) {
         var summary = teamSummaryRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("组内汇总不存在"));
+            .orElseThrow(() -> new BusinessException("组内汇总不存在"));
         if (!summary.getLeaderId().equals(leaderId)) {
-            throw new RuntimeException("只能编辑自己组的汇总");
+            throw new BusinessException("只能编辑自己组的汇总");
         }
         if (!"DRAFT".equals(summary.getStatus())) {
-            throw new RuntimeException("当前状态不可编辑");
+            throw new BusinessException("当前状态不可编辑");
         }
         summary.setEditedContent(editedContent);
         teamSummaryRepository.save(summary);
@@ -168,25 +185,67 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
     }
 
     @Override
+    @Transactional
     public TeamSummaryResponse submit(Long id, Long leaderId) {
         var summary = teamSummaryRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("组内汇总不存在"));
+            .orElseThrow(() -> new BusinessException("组内汇总不存在"));
         if (!summary.getLeaderId().equals(leaderId)) {
-            throw new RuntimeException("只能提交自己组的汇总");
+            throw new BusinessException("只能提交自己组的汇总");
         }
         if (!"DRAFT".equals(summary.getStatus())) {
-            throw new RuntimeException("当前状态不可提交");
+            throw new BusinessException("当前状态不可提交");
         }
         summary.setStatus("SUBMITTED");
         summary.setSubmittedAt(LocalDateTime.now());
         teamSummaryRepository.save(summary);
+
+        // Auto-approve all member reports for this week
+        autoApproveMemberReports(summary);
+
         return toResponse(summary);
+    }
+
+    /**
+     * When team leader submits summary, auto-approve all member weekly reports
+     * for this week - bypassing individual approval step.
+     */
+    private void autoApproveMemberReports(TeamSummary summary) {
+        User leader = userRepository.findById(summary.getLeaderId()).orElse(null);
+        if (leader == null) return;
+
+        List<Team> teams = teamRepository.findByLeader(leader.getName());
+        Set<String> memberNames = new HashSet<>();
+        for (Team t : teams) {
+            if (t.getMembers() != null && !t.getMembers().isBlank()) {
+                Arrays.stream(t.getMembers().split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .forEach(memberNames::add);
+            }
+        }
+
+        List<Long> memberIds = userRepository.findByNameIn(new ArrayList<>(memberNames)).stream()
+            .map(User::getId)
+            .toList();
+
+        for (Long memberId : memberIds) {
+            var report = weeklyReportRepository.findLatestByUserIdAndWeekStartDate(
+                memberId, summary.getWeekStartDate());
+            if (report.isPresent() && "SUBMITTED".equals(report.get().getStatus())) {
+                var r = report.get();
+                r.setStatus("APPROVED");
+                r.setReviewerId(leader.getId());
+                r.setReviewedAt(LocalDateTime.now());
+                r.setReviewComment("组长已提交组内汇总，自动审批通过");
+                weeklyReportRepository.save(r);
+            }
+        }
     }
 
     @Override
     public TeamSummaryResponse getById(Long id) {
         var summary = teamSummaryRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("组内汇总不存在"));
+            .orElseThrow(() -> new BusinessException("组内汇总不存在"));
         return toResponse(summary);
     }
 
@@ -226,13 +285,15 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
     private WeeklyReportResponse toWeeklyResponse(WeeklyReport r) {
         String userName = "";
         String userDepartment = "";
+        String teamName = null;
         User user = userRepository.findById(r.getUserId()).orElse(null);
         if (user != null) {
             userName = user.getName();
             userDepartment = user.getDepartment() != null ? user.getDepartment() : "";
+            teamName = findTeamNameForUser(userName);
         }
         return new WeeklyReportResponse(
-            r.getId(), r.getUserId(), userName, userDepartment,
+            r.getId(), r.getUserId(), userName, userDepartment, teamName,
             r.getWeekStartDate(), r.getWeekEndDate(),
             r.getDoneWork(), r.getPlanWork(),
             r.getProblems(), r.getSupportNeeded(),
@@ -241,6 +302,10 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
             null, false, r.getVersion(),
             r.getCreatedAt(), r.getUpdatedAt()
         );
+    }
+
+    private String findTeamNameForUser(String userName) {
+        return TeamUtils.findTeamNameForUser(teamRepository.findAll(), userName);
     }
 
     private TeamSummaryResponse toResponse(TeamSummary s) {

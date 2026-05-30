@@ -104,4 +104,33 @@ public class WeeklyReportController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ApiResponse.ok(weeklyReportService.listAllHistory(from, to));
     }
+
+    @GetMapping("/team-stats")
+    public ApiResponse<java.util.Map<String, Object>> getTeamStats(Authentication auth) {
+        Long userId = (Long) auth.getPrincipal();
+        return ApiResponse.ok(weeklyReportService.getTeamStats(userId));
+    }
+
+    @PostMapping("/{id:\\d+}/remind")
+    public ApiResponse<Void> remind(@PathVariable Long id, Authentication auth) {
+        Long userId = (Long) auth.getPrincipal();
+        weeklyReportService.remindMember(id, userId);
+        return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/compare")
+    public ApiResponse<java.util.Map<String, Object>> compare(
+            Authentication auth,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        Long userId = (Long) auth.getPrincipal();
+        return ApiResponse.ok(weeklyReportService.compareWeeks(userId, from, to));
+    }
+
+    @GetMapping("/dept-team-status")
+    @PreAuthorize("hasAnyRole('ROLE_CLERK', 'ROLE_ADMIN')")
+    public ApiResponse<java.util.Map<String, Object>> getDeptTeamStatus(Authentication auth) {
+        Long userId = (Long) auth.getPrincipal();
+        return ApiResponse.ok(weeklyReportService.getDeptTeamStatus(userId));
+    }
 }

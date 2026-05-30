@@ -2,6 +2,7 @@ package com.techmanage.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.techmanage.common.BusinessException;
 import com.techmanage.dto.WeeklyReportResponse;
 import com.techmanage.repository.SystemConfigRepository;
 import com.techmanage.service.AiService;
@@ -55,7 +56,7 @@ public class AiServiceImpl implements AiService {
     public String mergeReports(List<WeeklyReportResponse> reports) {
         String key = resolveApiKey();
         if (key == null || key.isBlank()) {
-            throw new RuntimeException("AI服务未配置：请在系统管理中设置 DeepSeek API Key");
+            throw new BusinessException("AI服务未配置：请在系统管理中设置 DeepSeek API Key");
         }
 
         String systemPrompt = """
@@ -109,7 +110,7 @@ public class AiServiceImpl implements AiService {
             JsonNode parsed = objectMapper.readTree(content);
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(parsed);
         } catch (Exception e) {
-            throw new RuntimeException("AI合并失败: " + e.getMessage(), e);
+            throw new BusinessException("AI合并失败: " + e.getMessage(), e);
         }
     }
 }

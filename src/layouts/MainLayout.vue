@@ -30,7 +30,10 @@ const pageTitle = computed(() => {
     '/checklist': '清单革命',
     '/reward': '奖惩记录',
     '/issue': '科技问题管理',
-    '/weekly': '工作周报',
+    '/weekly/fill': '工作周报',
+    '/weekly/team': '工作周报',
+    '/weekly/history': '工作周报',
+    '/weekly/dept': '工作周报',
     '/pending': '系统问题实施',
     '/admin': '系统管理',
   }
@@ -112,7 +115,16 @@ onUnmounted(() => {
 
 const menuItems = [
   { path: '/dashboard', title: '首页', icon: HomeFilled },
-  { path: '/weekly', title: '工作周报', icon: Document },
+]
+
+const weeklySubItems = [
+  { path: '/weekly/fill', title: '填写周报' },
+  { path: '/weekly/team', title: '团队周报', roles: ['ROLE_LEADER', 'ROLE_CLERK', 'ROLE_ADMIN'] },
+  { path: '/weekly/dept', title: '部门汇总', roles: ['ROLE_CLERK', 'ROLE_ADMIN'] },
+  { path: '/weekly/history', title: '历史记录' },
+]
+
+const otherMenuItems = [
   { path: '/checklist', title: '清单革命', icon: List },
   { path: '/reward', title: '奖惩记录', icon: Trophy },
   { path: '/issue', title: '科技问题管理', icon: Warning },
@@ -121,6 +133,12 @@ const menuItems = [
 const adminMenu = [
   { path: '/admin', title: '系统管理', icon: Setting },
 ]
+
+const visibleWeeklySubItems = computed(() =>
+  weeklySubItems.filter(s => !s.roles || s.roles.some(r => userStore.hasRole(r)))
+)
+
+const isWeeklyRoute = computed(() => route.path.startsWith('/weekly'))
 
 const showPending = computed(() => userStore.user?.department === '信息科技部')
 
@@ -186,12 +204,31 @@ function handleLogout() {
       <el-menu
         :default-active="route.path"
         router
-        background-color="#001529"
-        text-color="rgba(255,255,255,0.65)"
+        background-color="#0b1a2e"
+        text-color="rgba(255,255,255,0.55)"
         active-text-color="#fff"
         :collapse="sidebarWidth < 160"
       >
         <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.title }}</span>
+        </el-menu-item>
+
+        <el-sub-menu index="weekly-sub">
+          <template #title>
+            <el-icon><Document /></el-icon>
+            <span>工作周报</span>
+          </template>
+          <el-menu-item
+            v-for="sub in visibleWeeklySubItems"
+            :key="sub.path"
+            :index="sub.path"
+          >
+            {{ sub.title }}
+          </el-menu-item>
+        </el-sub-menu>
+
+        <el-menu-item v-for="item in otherMenuItems" :key="item.path" :index="item.path">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.title }}</span>
         </el-menu-item>
@@ -223,11 +260,31 @@ function handleLogout() {
       <div class="logo">科技管理平台</div>
       <el-menu
         :default-active="route.path"
-        background-color="#001529"
+        background-color="#0b1a2e"
         text-color="rgba(255,255,255,0.65)"
         active-text-color="#fff"
       >
         <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path" @click="navigate(item.path)">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.title }}</span>
+        </el-menu-item>
+
+        <el-sub-menu index="weekly-sub-mobile">
+          <template #title>
+            <el-icon><Document /></el-icon>
+            <span>工作周报</span>
+          </template>
+          <el-menu-item
+            v-for="sub in visibleWeeklySubItems"
+            :key="sub.path"
+            :index="sub.path"
+            @click="navigate(sub.path)"
+          >
+            {{ sub.title }}
+          </el-menu-item>
+        </el-sub-menu>
+
+        <el-menu-item v-for="item in otherMenuItems" :key="item.path" :index="item.path" @click="navigate(item.path)">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.title }}</span>
         </el-menu-item>
@@ -314,7 +371,7 @@ function handleLogout() {
 
 /* === Desktop sidebar === */
 .desktop-sidebar {
-  background-color: #001529;
+  background-color: #0b1a2e;
   overflow: hidden;
   position: relative;
   transition: none;
@@ -334,33 +391,77 @@ function handleLogout() {
   background: rgba(24, 144, 255, 0.4);
 }
 .logo {
-  height: 48px;
-  line-height: 48px;
+  height: 52px;
+  line-height: 52px;
   text-align: center;
   color: #fff;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   letter-spacing: 1px;
-  background: #002140;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  background: #091829;
+}
+.desktop-sidebar :deep(.el-menu-item) {
+  height: 48px;
+  line-height: 48px;
+  margin: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.desktop-sidebar :deep(.el-sub-menu__title) {
+  height: 48px;
+  line-height: 48px;
+  color: rgba(255,255,255,0.55) !important;
+  border-radius: 6px;
+  font-size: 14px;
 }
 .desktop-sidebar :deep(.el-menu) {
   border-right: none;
 }
-.desktop-sidebar :deep(.el-menu-item) {
-  height: 44px;
-  line-height: 44px;
+.desktop-sidebar :deep(.el-sub-menu) {
   margin: 4px 8px;
-  border-radius: 6px;
+}
+.desktop-sidebar :deep(.el-sub-menu__title:hover) {
+  background-color: rgba(255,255,255,0.08) !important;
+  color: #fff !important;
+}
+.desktop-sidebar :deep(.el-sub-menu.is-active .el-sub-menu__title) {
+  color: #fff !important;
+}
+.desktop-sidebar :deep(.el-sub-menu.is-opened .el-sub-menu__title) {
+  color: #fff !important;
 }
 .desktop-sidebar :deep(.el-menu-item.is-active) {
-  background-color: #1890ff !important;
+  background-color: rgba(0,110,255,0.2) !important;
+  border-left: 3px solid #006eff;
+  color: #fff !important;
 }
 .desktop-sidebar :deep(.el-menu-item:hover) {
   background-color: rgba(255,255,255,0.08) !important;
 }
 .desktop-sidebar :deep(.el-menu-item.is-active:hover) {
-  background-color: #1890ff !important;
+  background-color: rgba(0,110,255,0.2) !important;
+  border-left: 3px solid #006eff;
+  color: #fff !important;
+}
+/* Sub-menu popup dark theme */
+.desktop-sidebar :deep(.el-menu--popup) {
+  background-color: #0b1a2e !important;
+}
+.desktop-sidebar :deep(.el-menu--popup .el-menu-item) {
+  background-color: #0b1a2e !important;
+  color: rgba(255,255,255,0.65) !important;
+  border-radius: 0;
+  margin: 0;
+}
+.desktop-sidebar :deep(.el-menu--popup .el-menu-item:hover) {
+  background-color: rgba(255,255,255,0.08) !important;
+  color: #fff !important;
+}
+.desktop-sidebar :deep(.el-menu--popup .el-menu-item.is-active) {
+  background-color: rgba(0,110,255,0.2) !important;
+  border-left: 3px solid #006eff;
+  color: #fff !important;
+  color: #fff !important;
 }
 
 /* === Header === */
@@ -399,8 +500,8 @@ function handleLogout() {
   gap: 3px;
   padding: 3px 10px;
   border-radius: 12px;
-  background: #e6f7ff;
-  color: #1890ff;
+  background: #e8f1ff;
+  color: #006eff;
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s;
@@ -424,10 +525,19 @@ function handleLogout() {
 /* === Mobile drawer === */
 .mobile-drawer :deep(.el-drawer__body) {
   padding: 0;
-  background-color: #001529;
+  background-color: #0b1a2e;
 }
 .mobile-drawer .el-menu {
   border-right: none;
+}
+.mobile-drawer :deep(.el-sub-menu__title) {
+  height: 44px;
+  line-height: 44px;
+  color: rgba(255,255,255,0.65) !important;
+}
+.mobile-drawer :deep(.el-sub-menu__title:hover) {
+  background-color: rgba(255,255,255,0.08) !important;
+  color: #fff !important;
 }
 .mobile-drawer :deep(.el-menu-item) {
   height: 44px;
@@ -436,7 +546,9 @@ function handleLogout() {
   border-radius: 6px;
 }
 .mobile-drawer :deep(.el-menu-item.is-active) {
-  background-color: #1890ff !important;
+  background-color: rgba(0,110,255,0.2) !important;
+  border-left: 3px solid #006eff;
+  color: #fff !important;
 }
 .drawer-footer {
   position: absolute;

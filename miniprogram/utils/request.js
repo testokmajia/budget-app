@@ -18,6 +18,13 @@ function request(options) {
           reject(new Error('登录已过期'))
           return
         }
+        // 优先使用后端返回的中文错误消息
+        if (res.statusCode >= 400) {
+          const errMsg = res.data?.error || '请求失败'
+          wx.showToast({ title: errMsg, icon: 'none' })
+          reject(new Error(errMsg))
+          return
+        }
         if (res.data.success === false) {
           wx.showToast({ title: res.data.error || '请求失败', icon: 'none' })
           reject(new Error(res.data.error))
