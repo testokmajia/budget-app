@@ -9,6 +9,9 @@ import com.techmanage.entity.Team;
 import com.techmanage.entity.TeamSummary;
 import com.techmanage.entity.User;
 import com.techmanage.entity.WeeklyReport;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.techmanage.repository.TeamRepository;
 import com.techmanage.repository.TeamSummaryRepository;
 import com.techmanage.repository.UserRepository;
@@ -19,6 +22,7 @@ import com.techmanage.util.TeamUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -32,17 +36,23 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
     private final AiService aiService;
+    private final ObjectMapper objectMapper;
+
+    private static final String EMPTY_TEMPLATE = """
+        {"overview":"","keyProgress":"","commonIssues":"","nextWeekPlans":"","coordinationItems":""}""";
 
     public TeamSummaryServiceImpl(TeamSummaryRepository teamSummaryRepository,
                                    WeeklyReportRepository weeklyReportRepository,
                                    UserRepository userRepository,
                                    TeamRepository teamRepository,
-                                   AiService aiService) {
+                                   AiService aiService,
+                                   ObjectMapper objectMapper) {
         this.teamSummaryRepository = teamSummaryRepository;
         this.weeklyReportRepository = weeklyReportRepository;
         this.userRepository = userRepository;
         this.teamRepository = teamRepository;
         this.aiService = aiService;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -70,49 +80,14 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
             throw new BusinessException("您的团队暂无成员，请先在团队管理中配置");
         }
 
-        List<Long> memberIds = userRepository.findByNameIn(new ArrayList<>(memberNames)).stream()
-            .map(User::getId)
-            .toList();
-
-        if (memberIds.isEmpty()) {
-            throw new BusinessException("团队成员账号未找到，请检查团队管理中的成员姓名");
-        }
-
-        // Get all submitted reports from team members
-        // Find all submitted or approved reports from team members (not just SUBMITTED)
-        List<WeeklyReport> allSubmitted = weeklyReportRepository
-            .findSubmittedOrApprovedByUserIds(memberIds);
-
-        if (allSubmitted.isEmpty()) {
-            throw new BusinessException("组内暂无已提交的周报");
-        }
-
-        // 确定目标周：优先使用请求中的日期，未提供则查找最新有报告的周
-        // 如果请求的周没有报告，自动回退到最新有报告的周，确保 AI 汇总总能生成
-        final LocalDate requestedWeek = request.weekStartDate();
-        final LocalDate latestWeek = allSubmitted.stream()
-            .map(WeeklyReport::getWeekStartDate)
-            .max(LocalDate::compareTo)
-            .orElseThrow(() -> new BusinessException("无法确定周报日期"));
-
-        LocalDate targetWeek;
-        if (requestedWeek != null) {
-            // 检查请求的周是否有报告
-            final LocalDate rw = requestedWeek;
-            boolean hasReports = allSubmitted.stream()
-                .anyMatch(r -> rw.equals(r.getWeekStartDate()));
-            targetWeek = hasReports ? requestedWeek : latestWeek;
+        // 提前确定目标周和团队名称（在检查报告之前），确保回退逻辑可用
+        final LocalDate targetWeek;
+        if (request.weekStartDate() != null) {
+            targetWeek = request.weekStartDate();
         } else {
-            targetWeek = latestWeek;
+            targetWeek = LocalDate.now().with(DayOfWeek.MONDAY);
         }
 
-        // 筛选目标周的报告
-        final LocalDate filterWeek = targetWeek;
-        List<WeeklyReport> reports = allSubmitted.stream()
-            .filter(r -> filterWeek.equals(r.getWeekStartDate()))
-            .collect(Collectors.toList());
-
-        // Use requested team name or default to first team's name
         final String teamName;
         if (request.teamName() != null && !request.teamName().isBlank()) {
             teamName = teams.stream()
@@ -124,9 +99,22 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
             teamName = teams.get(0).getName();
         }
 
-        if (reports.isEmpty()) {
-            throw new BusinessException("本周组内暂无已提交的周报");
+        List<Long> memberIds = userRepository.findByNameIn(new ArrayList<>(memberNames)).stream()
+            .map(User::getId)
+            .toList();
+
+        if (memberIds.isEmpty()) {
+            throw new BusinessException("团队成员账号未找到，请检查团队管理中的成员姓名");
         }
+
+        // Get all submitted reports from team members
+        List<WeeklyReport> allSubmitted = weeklyReportRepository
+            .findSubmittedOrApprovedByUserIds(memberIds);
+
+        // 筛选目标周的报告
+        List<WeeklyReport> reports = allSubmitted.stream()
+            .filter(r -> targetWeek.equals(r.getWeekStartDate()))
+            .collect(Collectors.toList());
 
         // Keep only latest version per user
         reports = reports.stream()
@@ -139,11 +127,43 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
             .map(Optional::get)
             .toList();
 
-        List<WeeklyReportResponse> reportResponses = reports.stream()
-            .map(this::toWeeklyResponse)
-            .toList();
+        String aiResult;
+        List<WeeklyReport> sourceReports;
 
-        String aiResult = aiService.mergeReports(reportResponses);
+        if (!reports.isEmpty()) {
+            // 有成员周报：使用现有 AI 合并逻辑
+            List<WeeklyReportResponse> reportResponses = reports.stream()
+                .map(this::toWeeklyResponse)
+                .toList();
+            aiResult = aiService.mergeReports(reportResponses);
+            sourceReports = reports;
+        } else {
+            // 无成员周报：尝试基于上周团队周报的下周计划生成
+            LocalDate lastMonday = targetWeek.minusDays(7);
+            var lastSummary = teamSummaryRepository.findByTeamNameAndWeekStartDate(teamName, lastMonday);
+
+            String lastWeekContent = lastSummary
+                .map(ts -> ts.getEditedContent() != null ? ts.getEditedContent() : ts.getMergedContent())
+                .orElse(null);
+            String lastWeekPlans = extractNextWeekPlans(lastWeekContent);
+
+            if (lastWeekPlans != null) {
+                // 用上周计划构造合成报告，AI 生成本周周报
+                WeeklyReportResponse synthetic = new WeeklyReportResponse(
+                    null, null, "上周计划", "信息科技部", teamName,
+                    targetWeek, targetWeek.plusDays(4),
+                    lastWeekPlans, "", "", "", "APPROVED",
+                    null, null, null, null, false, 1, null, null
+                );
+                aiResult = aiService.mergeReports(List.of(synthetic));
+                // 清空本周的下周计划（不能从历史周继承）
+                aiResult = clearNextWeekPlans(aiResult);
+            } else {
+                // 上周也无记录或计划为空，生成空模板，供组长手动编辑
+                aiResult = EMPTY_TEMPLATE;
+            }
+            sourceReports = List.of();
+        }
 
         var existing = teamSummaryRepository.findByTeamNameAndWeekStartDate(teamName, targetWeek);
         TeamSummary summary;
@@ -161,7 +181,7 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
             summary.setWeekEndDate(targetWeek.plusDays(4));
             summary.setMergedContent(aiResult);
         }
-        summary.setSourceReportIds(reports.stream()
+        summary.setSourceReportIds(sourceReports.stream()
             .map(r -> String.valueOf(r.getId()))
             .collect(Collectors.joining(",")));
 
@@ -306,6 +326,37 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
 
     private String findTeamNameForUser(String userName) {
         return TeamUtils.findTeamNameForUser(teamRepository.findAll(), userName);
+    }
+
+    /**
+     * 从周报 JSON 内容中提取下周计划字段（nextWeekPlans）。
+     * @return 非空计划字符串，如果不存在或解析失败则返回 null
+     */
+    private String extractNextWeekPlans(String jsonContent) {
+        if (jsonContent == null || jsonContent.isBlank()) return null;
+        try {
+            JsonNode node = objectMapper.readTree(jsonContent);
+            String plans = node.path("nextWeekPlans").asText(null);
+            return (plans != null && !plans.isBlank()) ? plans : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 将 AI 返回的 JSON 中的 nextWeekPlans 字段清空，
+     * 确保本周周报不会从历史周继承下周计划。
+     */
+    private String clearNextWeekPlans(String aiJson) {
+        try {
+            JsonNode node = objectMapper.readTree(aiJson);
+            if (node.isObject()) {
+                ((ObjectNode) node).put("nextWeekPlans", "");
+            }
+            return objectMapper.writeValueAsString(node);
+        } catch (Exception e) {
+            return aiJson; // 解析失败则返回原文
+        }
     }
 
     private TeamSummaryResponse toResponse(TeamSummary s) {

@@ -284,17 +284,10 @@ async function handleTeamClick(t) {
   ElMessage.info('组内汇总数据加载失败，请刷新页面重试')
 }
 
-// 本周的部门汇总（优先精确匹配，兜底取最近一份）
+// 本周的部门汇总（只精确匹配本周，避免跨周状态污染）
 const currentWeekReport = computed(() => {
   const thisMonday = getWeekDates().weekStartDate
-  // 优先精确匹配本周
-  const exact = reports.value.find(r => r.weekStartDate === thisMonday)
-  if (exact) return exact
-  // 兜底：取最近一份（处理后端回退逻辑导致周日期不一致的情况）
-  if (reports.value.length === 0) return null
-  return reports.value.reduce((a, b) =>
-    (a.weekStartDate || '') > (b.weekStartDate || '') ? a : b
-  )
+  return reports.value.find(r => r.weekStartDate === thisMonday) || null
 })
 
 // 部门周报是否已审定

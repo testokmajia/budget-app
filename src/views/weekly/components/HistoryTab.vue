@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
-import { getMyReports, getTeamHistory, getAllHistory } from '@/api/weekly'
+import { getMyReports, getTeamHistory, getAllHistory, listMyTeamSummaries, getDeptReports } from '@/api/weekly'
 import { parseItems } from '@/utils/workItemParser'
 import ReportDetail from './ReportDetail.vue'
 
@@ -17,6 +17,9 @@ const activeExportFormat = ref('word')
 const personalData = ref([])
 const teamData = ref([])
 const deptData = ref([])
+// 团队周报（team_summaries 表）和部门周报（department_reports 表）
+const teamSummaryData = ref([])
+const deptReportData = ref([])
 
 // Role checks
 const isLeader = computed(() => userStore.hasRole('ROLE_LEADER'))
@@ -50,6 +53,23 @@ function dedupByWeek(arr, keyFn) {
   })
 }
 
+// 解析团队周报/部门周报的 JSON 内容
+function parseSummaryContent(content) {
+  if (!content) return { overview: '', keyProgress: '', commonIssues: '', nextWeekPlans: '', coordinationItems: '' }
+  try {
+    const o = JSON.parse(content)
+    return {
+      overview: o.overview || '',
+      keyProgress: o.keyProgress || '',
+      commonIssues: o.commonIssues || '',
+      nextWeekPlans: o.nextWeekPlans || '',
+      coordinationItems: o.coordinationItems || ''
+    }
+  } catch {
+    return { overview: content, keyProgress: '', commonIssues: '', nextWeekPlans: '', coordinationItems: '' }
+  }
+}
+
 onMounted(refresh)
 
 async function refresh() {
@@ -59,30 +79,64 @@ async function refresh() {
     const personal = await getMyReports({}).catch(() => ({ data: [] }))
     personalData.value = dedupByWeek(
       (personal.data || []).map(r => ({
-        ...r, doneItems: parseItems(r.doneWork).filter(i => i.item), planItems: parseItems(r.planWork).filter(i => i.item)
+        ...r, recordType: 'weekly', doneItems: parseItems(r.doneWork).filter(i => i.item), planItems: parseItems(r.planWork).filter(i => i.item)
       })),
       r => `${r.weekStartDate}_${r.weekEndDate}_${r.userId || r.userName}`
     )
 
-    // Load team if leader or clerk/admin — 同一组同一周只显示最新
+    // Load team if leader or clerk/admin
     if (isLeader.value || isClerkOrAdmin.value) {
+      // 个人周报（按团队分组）
       const team = await getTeamHistory({}).catch(() => ({ data: [] }))
+      const teamReports = (team.data || []).map(r => ({
+        ...r, recordType: 'weekly', doneItems: parseItems(r.doneWork).filter(i => i.item), planItems: parseItems(r.planWork).filter(i => i.item)
+      }))
+
+      // 团队周报（team_summaries 表）
+      const tSummaries = await listMyTeamSummaries().catch(() => ({ data: [] }))
+      const summaryItems = (tSummaries.data || []).map(s => ({
+        id: 'ts_' + s.id,
+        weekStartDate: s.weekStartDate,
+        weekEndDate: s.weekEndDate,
+        teamName: s.teamName,
+        userName: s.leaderName ? '组长: ' + s.leaderName : '',
+        status: s.status,
+        summaryContent: parseSummaryContent(s.editedContent || s.mergedContent),
+        recordType: 'team-summary'
+      }))
+
+      // 合并个人周报和团队周报
       teamData.value = dedupByWeek(
-        (team.data || []).map(r => ({
-          ...r, doneItems: parseItems(r.doneWork).filter(i => i.item), planItems: parseItems(r.planWork).filter(i => i.item)
-        })),
-        r => `${r.weekStartDate}_${r.weekEndDate}_${r.teamName || ''}`
+        [...teamReports, ...summaryItems],
+        r => `${r.weekStartDate}_${r.weekEndDate}_${r.teamName || ''}_${r.recordType}`
       )
     }
 
-    // Load all if clerk/admin — 同一周只显示最新
+    // Load all if clerk/admin
     if (isClerkOrAdmin.value) {
+      // 全部个人周报
       const all = await getAllHistory({}).catch(() => ({ data: [] }))
+      const allReports = (all.data || []).map(r => ({
+        ...r, recordType: 'weekly', doneItems: parseItems(r.doneWork).filter(i => i.item), planItems: parseItems(r.planWork).filter(i => i.item)
+      }))
+
+      // 部门周报（department_reports 表）
+      const dReports = await getDeptReports().catch(() => ({ data: [] }))
+      const deptItems = (dReports.data || []).map(r => ({
+        id: 'dr_' + r.id,
+        weekStartDate: r.weekStartDate,
+        weekEndDate: r.weekEndDate,
+        department: r.department,
+        userName: r.finalizedByName ? '审定人: ' + r.finalizedByName : '',
+        status: r.status,
+        summaryContent: parseSummaryContent(r.editedContent || r.mergedContent),
+        recordType: 'dept-report'
+      }))
+
+      // 合并个人周报和部门周报
       deptData.value = dedupByWeek(
-        (all.data || []).map(r => ({
-          ...r, doneItems: parseItems(r.doneWork).filter(i => i.item), planItems: parseItems(r.planWork).filter(i => i.item)
-        })),
-        r => `${r.weekStartDate}_${r.weekEndDate}`
+        [...allReports, ...deptItems],
+        r => `${r.weekStartDate}_${r.weekEndDate}_${r.recordType}`
       )
     }
 
@@ -131,14 +185,17 @@ const reportSubtitle = computed(() => {
   const parts = []
   if (r.userName) parts.push(r.userName)
   if (r.teamName) parts.push(r.teamName)
+  if (r.department) parts.push(r.department)
   parts.push(`${r.weekStartDate} ~ ${r.weekEndDate}`)
   if (r.version > 0) parts.push(`V${r.version}`)
+  if (r.recordType === 'team-summary') parts.push('团队汇总')
+  if (r.recordType === 'dept-report') parts.push('部门汇总')
   return parts.join(' · ')
 })
 
 const reportStats = computed(() => {
   const r = selectedReport.value
-  if (!r) return null
+  if (!r || r.summaryContent) return null
   const doneItems = r.doneItems || []
   return {
     done: doneItems.filter(i => i.status === 'done').length,
@@ -152,8 +209,20 @@ const reportSections = computed(() => {
   const r = selectedReport.value
   if (!r) return []
   const secs = []
-  const doneItems = (r.doneItems || []).filter(i => i.item)
 
+  // 团队周报/部门周报：用 prose 格式展示
+  if (r.summaryContent) {
+    const c = r.summaryContent
+    if (c.overview) secs.push({ type: 'prose', title: '本周工作概览', colorBar: 'green', content: c.overview })
+    if (c.keyProgress) secs.push({ type: 'prose', title: '重点工作进展', colorBar: 'blue', content: c.keyProgress })
+    if (c.commonIssues) secs.push({ type: 'problems', title: '共性问题与风险', colorBar: 'red', content: c.commonIssues })
+    if (c.nextWeekPlans) secs.push({ type: 'prose', title: '下周重点计划', colorBar: 'blue', content: c.nextWeekPlans })
+    if (c.coordinationItems) secs.push({ type: 'support', title: '需要协调的事项', colorBar: 'amber', content: c.coordinationItems })
+    return secs
+  }
+
+  // 个人周报：用 work-items 格式展示
+  const doneItems = (r.doneItems || []).filter(i => i.item)
   if (doneItems.length) {
     secs.push({ type: 'work-items', title: '本周完成工作', colorBar: 'green', count: doneItems.length, items: doneItems })
   }
@@ -178,8 +247,21 @@ function generateReportText(r) {
   lines.push(`${r.weekStartDate} ~ ${r.weekEndDate}`)
   if (r.userName) lines.push(`姓名：${r.userName}`)
   if (r.teamName) lines.push(`团队：${r.teamName}`)
+  if (r.department) lines.push(`部门：${r.department}`)
   lines.push('')
 
+  // 团队周报/部门周报：输出结构化内容
+  if (r.summaryContent) {
+    const c = r.summaryContent
+    if (c.overview) { lines.push('一、本周工作概览'); lines.push(`  ${c.overview}`); lines.push('') }
+    if (c.keyProgress) { lines.push('二、重点工作进展'); lines.push(`  ${c.keyProgress}`); lines.push('') }
+    if (c.commonIssues) { lines.push('三、共性问题与风险'); lines.push(`  ${c.commonIssues}`); lines.push('') }
+    if (c.nextWeekPlans) { lines.push('四、下周重点计划'); lines.push(`  ${c.nextWeekPlans}`); lines.push('') }
+    if (c.coordinationItems) { lines.push('五、需要协调的事项'); lines.push(`  ${c.coordinationItems}`); lines.push('') }
+    return lines.join('\n')
+  }
+
+  // 个人周报：输出工作项
   if (r.doneItems && r.doneItems.length) {
     lines.push('一、本周完成工作')
     r.doneItems.forEach((item, i) => {
@@ -223,6 +305,7 @@ function generateReportHtml(r) {
 h1{text-align:center;border-bottom:2px solid #1a1a1a;padding-bottom:10px;margin-bottom:20px;}
 h3{color:#006eff;margin-top:20px;}
 .period{text-align:center;color:#999;font-size:14px;margin-bottom:20px;}
+.prose{margin-bottom:16px;line-height:1.8;}
 .item-list{margin:0;padding-left:18px;}
 .item-list li{padding:4px 0;}
 .problems{background:#fff3f3;padding:12px;border-radius:4px;color:#c41230;}
@@ -232,8 +315,22 @@ h3{color:#006eff;margin-top:20px;}
 <h1>${title}</h1>
 <p class="period">${r.weekStartDate} ~ ${r.weekEndDate}</p>
 ${r.userName ? `<p>姓名：${r.userName}</p>` : ''}
-${r.teamName ? `<p>团队：${r.teamName}</p>` : ''}`
+${r.teamName ? `<p>团队：${r.teamName}</p>` : ''}
+${r.department ? `<p>部门：${r.department}</p>` : ''}`
 
+  // 团队周报/部门周报
+  if (r.summaryContent) {
+    const c = r.summaryContent
+    if (c.overview) html += `<h3>一、本周工作概览</h3><div class="prose">${c.overview}</div>`
+    if (c.keyProgress) html += `<h3>二、重点工作进展</h3><div class="prose">${c.keyProgress}</div>`
+    if (c.commonIssues) html += `<h3>三、共性问题与风险</h3><div class="problems">${c.commonIssues}</div>`
+    if (c.nextWeekPlans) html += `<h3>四、下周重点计划</h3><div class="prose">${c.nextWeekPlans}</div>`
+    if (c.coordinationItems) html += `<h3>五、需要协调的事项</h3><div class="support">${c.coordinationItems}</div>`
+    html += '</body></html>'
+    return html
+  }
+
+  // 个人周报
   if (r.doneItems && r.doneItems.length) {
     html += '<h3>一、本周完成工作</h3><ul class="item-list">'
     r.doneItems.forEach(item => {
@@ -275,7 +372,21 @@ function generatePreviewHtml(r) {
   html += '<p class="period">' + r.weekStartDate + ' ~ ' + r.weekEndDate + '</p>'
   if (r.userName) html += '<p>姓名：' + r.userName + '</p>'
   if (r.teamName) html += '<p>团队：' + r.teamName + '</p>'
+  if (r.department) html += '<p>部门：' + r.department + '</p>'
 
+  // 团队周报/部门周报：结构化内容
+  if (r.summaryContent) {
+    const c = r.summaryContent
+    if (c.overview) html += '<h3>一、本周工作概览</h3><div class="prose">' + c.overview + '</div>'
+    if (c.keyProgress) html += '<h3>二、重点工作进展</h3><div class="prose">' + c.keyProgress + '</div>'
+    if (c.commonIssues) html += '<h3>三、共性问题与风险</h3><div class="problems">' + c.commonIssues + '</div>'
+    if (c.nextWeekPlans) html += '<h3>四、下周重点计划</h3><div class="prose">' + c.nextWeekPlans + '</div>'
+    if (c.coordinationItems) html += '<h3>五、需要协调的事项</h3><div class="support">' + c.coordinationItems + '</div>'
+    html += '</div>'
+    return html
+  }
+
+  // 个人周报
   if (r.doneItems && r.doneItems.length) {
     html += '<h3>一、本周完成工作</h3><ul class="item-list">'
     r.doneItems.forEach(item => {
@@ -374,10 +485,15 @@ function handleCopy() {
             @click="selectReport(r)"
           >
             <div class="member-info">
-              <div class="member-name" style="font-size:12px;">{{ r.weekStartDate }} ~ {{ r.weekEndDate }}</div>
+              <div class="member-name" style="font-size:12px;">
+                <span v-if="r.recordType === 'team-summary'" style="color:var(--brand);">[团队汇总] </span>
+                <span v-else-if="r.recordType === 'dept-report'" style="color:var(--brand);">[部门汇总] </span>
+                {{ r.weekStartDate }} ~ {{ r.weekEndDate }}
+              </div>
               <div class="member-meta">
                 <span v-if="r.userName">{{ r.userName }}</span>
                 <span v-if="r.teamName"> · {{ r.teamName }}</span>
+                <span v-if="r.department"> · {{ r.department }}</span>
               </div>
             </div>
             <span class="h-pill" :class="r.status === 'APPROVED' || r.status === 'FINALIZED' || r.status === 'SUBMITTED' || r.status === 'PENDING_REVIEW' ? 'ok' : 'no'">{{ getText(r.status) }}</span>

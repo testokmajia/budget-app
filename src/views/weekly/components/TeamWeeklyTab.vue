@@ -102,11 +102,8 @@ function memberAvatarColor(name) {
 // 获取指定团队的组内汇总（优先本周，兜底取最近一份）
 function getTeamSummary(teamName) {
   const { weekStartDate } = getWeekDates()
-  // 优先精确匹配本周
-  const exact = summaries.value.find(s => s.teamName === teamName && s.weekStartDate === weekStartDate)
-  if (exact) return exact
-  // 兜底：取该团队最近一份汇总（处理后端因回退逻辑导致周日期不一致的情况）
-  return summaries.value.find(s => s.teamName === teamName) || null
+  // 只精确匹配本周，不使用历史周数据兜底，避免跨周状态污染
+  return summaries.value.find(s => s.teamName === teamName && s.weekStartDate === weekStartDate) || null
 }
 
 // 判断 AI 生成按钮是否应禁用，返回禁用原因（空字符串表示不禁用）

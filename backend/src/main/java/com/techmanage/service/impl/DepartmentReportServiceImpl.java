@@ -8,6 +8,9 @@ import com.techmanage.entity.DepartmentReport;
 import com.techmanage.entity.TeamSummary;
 import com.techmanage.entity.User;
 import com.techmanage.entity.WeeklyReport;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.techmanage.repository.DepartmentReportRepository;
 import com.techmanage.repository.TeamRepository;
 import com.techmanage.repository.TeamSummaryRepository;
@@ -19,6 +22,7 @@ import com.techmanage.util.TeamUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,19 +37,25 @@ public class DepartmentReportServiceImpl implements DepartmentReportService {
     private final TeamRepository teamRepository;
     private final TeamSummaryRepository teamSummaryRepository;
     private final AiService aiService;
+    private final ObjectMapper objectMapper;
+
+    private static final String EMPTY_TEMPLATE = """
+        {"overview":"","keyProgress":"","commonIssues":"","nextWeekPlans":"","coordinationItems":""}""";
 
     public DepartmentReportServiceImpl(DepartmentReportRepository deptReportRepository,
                                         WeeklyReportRepository weeklyReportRepository,
                                         UserRepository userRepository,
                                         TeamRepository teamRepository,
                                         TeamSummaryRepository teamSummaryRepository,
-                                        AiService aiService) {
+                                        AiService aiService,
+                                        ObjectMapper objectMapper) {
         this.deptReportRepository = deptReportRepository;
         this.weeklyReportRepository = weeklyReportRepository;
         this.userRepository = userRepository;
         this.teamRepository = teamRepository;
         this.teamSummaryRepository = teamSummaryRepository;
         this.aiService = aiService;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -75,33 +85,38 @@ public class DepartmentReportServiceImpl implements DepartmentReportService {
                 .toList();
         }
 
-        // 请求的周无任何数据，查找最新有数据的周
-        if (submittedSummaries.isEmpty() && fallbackReports.isEmpty()) {
-            LocalDate latestWeek = findLatestWeekWithData();
-            if (latestWeek != null && !latestWeek.equals(targetWeek)) {
-                targetWeek = latestWeek;
-                weekEnd = targetWeek.plusDays(4);
-                // 重新加载新目标周的数据
-                teamSummaries = teamSummaryRepository.findByWeekStartDate(targetWeek);
-                submittedSummaries = teamSummaries.stream()
-                    .filter(ts -> "SUBMITTED".equals(ts.getStatus()) || "APPROVED".equals(ts.getStatus()))
-                    .toList();
-                if (submittedSummaries.isEmpty()) {
-                    fallbackReports = weeklyReportRepository.findByWeekStartDate(targetWeek).stream()
-                        .filter(r -> "APPROVED".equals(r.getStatus()) || "SUBMITTED".equals(r.getStatus()))
-                        .toList();
-                }
-            }
-        }
-
-        if (submittedSummaries.isEmpty() && fallbackReports.isEmpty()) {
-            throw new BusinessException("本周暂无已提交或已审批的周报，请等待各组提交汇总后再试");
-        }
-
         String aiResult;
         StringBuilder sourceIds = new StringBuilder();
 
-        if (!submittedSummaries.isEmpty()) {
+        if (submittedSummaries.isEmpty() && fallbackReports.isEmpty()) {
+            // 无任何本周数据：尝试基于上周部门周报的下周计划生成
+            LocalDate lastMonday = requestedWeek.minusDays(7);
+            var lastReport = deptReportRepository.findByDepartmentAndWeekStartDate(
+                "信息科技部", lastMonday);
+
+            String lastWeekContent = lastReport
+                .map(r -> r.getEditedContent() != null ? r.getEditedContent() : r.getMergedContent())
+                .orElse(null);
+            String lastWeekPlans = extractNextWeekPlans(lastWeekContent);
+
+            if (lastWeekPlans != null) {
+                // 用上周计划构造合成报告，AI 生成本周部门周报
+                WeeklyReportResponse synthetic = new WeeklyReportResponse(
+                    null, null, "上周部门计划", "信息科技部", null,
+                    targetWeek, weekEnd,
+                    lastWeekPlans, "", "", "", "APPROVED",
+                    null, null, null, null, false, 1, null, null
+                );
+                aiResult = aiService.mergeReports(List.of(synthetic));
+                // 清空本周的下周计划（不能从历史周继承）
+                aiResult = clearNextWeekPlans(aiResult);
+                sourceIds.append("last_week_plan");
+            } else {
+                // 上周也无记录或计划为空，生成空模板
+                aiResult = EMPTY_TEMPLATE;
+                sourceIds.append("empty");
+            }
+        } else if (!submittedSummaries.isEmpty()) {
             // Merge from team summaries
             List<WeeklyReportResponse> summaryContents = submittedSummaries.stream()
                 .map(ts -> {
@@ -180,6 +195,37 @@ public class DepartmentReportServiceImpl implements DepartmentReportService {
             return latestSummaryWeek.isAfter(latestReportWeek) ? latestSummaryWeek : latestReportWeek;
         }
         return latestSummaryWeek != null ? latestSummaryWeek : latestReportWeek;
+    }
+
+    /**
+     * 从周报 JSON 内容中提取下周计划字段（nextWeekPlans）。
+     * @return 非空计划字符串，如果不存在或解析失败则返回 null
+     */
+    private String extractNextWeekPlans(String jsonContent) {
+        if (jsonContent == null || jsonContent.isBlank()) return null;
+        try {
+            JsonNode node = objectMapper.readTree(jsonContent);
+            String plans = node.path("nextWeekPlans").asText(null);
+            return (plans != null && !plans.isBlank()) ? plans : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 将 AI 返回的 JSON 中的 nextWeekPlans 字段清空，
+     * 确保本周周报不会从历史周继承下周计划。
+     */
+    private String clearNextWeekPlans(String aiJson) {
+        try {
+            JsonNode node = objectMapper.readTree(aiJson);
+            if (node.isObject()) {
+                ((ObjectNode) node).put("nextWeekPlans", "");
+            }
+            return objectMapper.writeValueAsString(node);
+        } catch (Exception e) {
+            return aiJson;
+        }
     }
 
     @Override
