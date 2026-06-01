@@ -6,6 +6,7 @@ import com.techmanage.common.BusinessException;
 import com.techmanage.dto.WeeklyReportResponse;
 import com.techmanage.repository.SystemConfigRepository;
 import com.techmanage.service.AiService;
+import com.techmanage.util.EncryptionUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -23,17 +24,20 @@ public class AiServiceImpl implements AiService {
     private final String model;
     private final ObjectMapper objectMapper;
     private final SystemConfigRepository systemConfigRepository;
+    private final EncryptionUtil encryptionUtil;
 
     public AiServiceImpl(
         @Value("${ai.deepseek.api-key:}") String apiKey,
         @Value("${ai.deepseek.base-url:https://api.deepseek.com}") String baseUrl,
         @Value("${ai.deepseek.model:deepseek-chat}") String model,
         ObjectMapper objectMapper,
-        SystemConfigRepository systemConfigRepository) {
+        SystemConfigRepository systemConfigRepository,
+        EncryptionUtil encryptionUtil) {
         this.apiKey = apiKey;
         this.model = model;
         this.objectMapper = objectMapper;
         this.systemConfigRepository = systemConfigRepository;
+        this.encryptionUtil = encryptionUtil;
         var factory = new JdkClientHttpRequestFactory();
         factory.setReadTimeout(Duration.ofSeconds(120));
         this.restClient = RestClient.builder()
@@ -47,7 +51,12 @@ public class AiServiceImpl implements AiService {
         var dbConfig = systemConfigRepository.findByConfigKey("deepseek.api.key");
         if (dbConfig.isPresent() && dbConfig.get().getConfigValue() != null
             && !dbConfig.get().getConfigValue().isBlank()) {
-            return dbConfig.get().getConfigValue();
+            try {
+                return encryptionUtil.decrypt(dbConfig.get().getConfigValue());
+            } catch (Exception e) {
+                // 解密失败，当作明文返回（兼容旧数据）
+                return dbConfig.get().getConfigValue();
+            }
         }
         return apiKey;
     }

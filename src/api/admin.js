@@ -61,6 +61,12 @@ export function updateSystem(id, data) {
 export function deleteSystem(id) {
   return request.delete(`/admin/systems/${id}`)
 }
+export function getDepartmentsPaged(params) {
+  return request.get('/admin/departments/paged', { params })
+}
+export function getSystemsPaged(params) {
+  return request.get('/admin/systems/paged', { params })
+}
 
 // 团队管理
 export function getTeams() {
@@ -93,7 +99,9 @@ export function deleteOccasion(id) {
 // 系统配置
 export function getConfigs() { return request.get('/admin/configs') }
 export function saveConfig(data) { return request.post('/admin/configs', data) }
-export function deleteConfig(id) { return request.delete(`/admin/configs/${id}`) }
+export function viewConfigValue(id, data) { return request.post(`/admin/configs/${id}/view`, data) }
+export function updateConfig(id, data) { return request.put(`/admin/configs/${id}`, data) }
+export function deleteConfig(id, data) { return request.post(`/admin/configs/${id}/delete`, data) }
 
 // Excel导出
 export function exportUsers() { return request.get('/admin/users/export', { responseType: 'blob' }) }

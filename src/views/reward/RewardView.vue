@@ -178,10 +178,6 @@ onMounted(() => {
 
 <template>
   <div class="page-container">
-    <div class="page-header">
-      <el-button v-if="canEdit" type="primary" :icon="Plus" @click="handleAdd">新增记录</el-button>
-    </div>
-
     <div class="search-bar">
       <el-select v-model="searchForm.type" placeholder="类型" clearable style="width: 100px" @change="fetchData">
         <el-option label="奖励" value="奖励" />
@@ -202,6 +198,7 @@ onMounted(() => {
         @change="fetchData"
       />
       <el-button @click="Object.assign(searchForm, { type: '', department: '', keyword: '', dateRange: [] }); fetchData()">重置</el-button>
+      <el-button v-if="canEdit" type="primary" :icon="Plus" @click="handleAdd" style="margin-left: auto">新增记录</el-button>
     </div>
 
     <el-table :data="tableData" v-loading="loading" stripe border>
@@ -352,15 +349,6 @@ onMounted(() => {
   gap: 4px;
   flex-wrap: nowrap;
   align-items: center;
-}
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-.page-header h2 {
-  margin: 0;
 }
 .search-bar {
   display: flex;

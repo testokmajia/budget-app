@@ -31,6 +31,9 @@ public class User extends BaseEntity implements UserDetails {
     @Column(length = 20)
     private String phone;
 
+    @Column(length = 100)
+    private String email;
+
     @Column(unique = true, length = 64)
     private String openId;
 
@@ -58,6 +61,8 @@ public class User extends BaseEntity implements UserDetails {
     public void setPosition(String position) { this.position = position; }
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
     public String getOpenId() { return openId; }
     public void setOpenId(String openId) { this.openId = openId; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }

@@ -41,8 +41,9 @@ public class AdminController {
             @RequestParam(required = false) String username,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String department,
+            @RequestParam(required = false) String email,
             @RequestParam(required = false) Boolean enabled) {
-        return ApiResponse.ok(adminService.listUsers(page, size, username, name, department, enabled));
+        return ApiResponse.ok(adminService.listUsers(page, size, username, name, department, email, enabled));
     }
 
     @PostMapping("/users")
@@ -111,6 +112,14 @@ public class AdminController {
         return ApiResponse.ok(adminService.listDepartments());
     }
 
+    @GetMapping("/departments/paged")
+    public ApiResponse<PageResponse<Department>> listDepartmentsPaged(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String keyword) {
+        return ApiResponse.ok(adminService.listDepartmentsPaged(page, size, keyword));
+    }
+
     @PostMapping("/departments")
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     public ApiResponse<Department> createDepartment(@Valid @RequestBody DepartmentRequest request) {
@@ -136,6 +145,14 @@ public class AdminController {
     @GetMapping("/systems")
     public ApiResponse<List<SystemInfo>> listSystems() {
         return ApiResponse.ok(adminService.listSystems());
+    }
+
+    @GetMapping("/systems/paged")
+    public ApiResponse<PageResponse<SystemInfo>> listSystemsPaged(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String keyword) {
+        return ApiResponse.ok(adminService.listSystemsPaged(page, size, keyword));
     }
 
     @PostMapping("/systems")
@@ -224,7 +241,7 @@ public class AdminController {
     @GetMapping("/users/export")
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_ISSUE_ADMIN')")
     public ResponseEntity<byte[]> exportUsers() {
-        var result = adminService.listUsers(0, Integer.MAX_VALUE, null, null, null, null);
+        var result = adminService.listUsers(0, Integer.MAX_VALUE, null, null, null, null, null);
         var headers = List.of("用户名", "姓名", "部门", "职位", "电话", "状态", "角色");
         List<List<String>> rows = result.content().stream().map(u -> List.of(
                 u.username(), u.name(), u.department() != null ? u.department() : "",
@@ -300,22 +317,47 @@ public class AdminController {
 
     // === 系统配置管理 ===
 
+    /** 获取所有配置（值已脱敏） */
     @GetMapping("/configs")
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     public ApiResponse<List<SystemConfig>> listConfigs() {
         return ApiResponse.ok(adminService.listConfigs());
     }
 
+    /** 新增配置（值自动加密，无需口令） */
     @PostMapping("/configs")
     @PreAuthorize("hasRole('ROLE_ADMIN')")
-    public ApiResponse<SystemConfig> saveConfig(@RequestBody SystemConfigRequest request) {
+    public ApiResponse<SystemConfig> saveConfig(@Valid @RequestBody SystemConfigRequest request) {
         return ApiResponse.ok(adminService.saveConfig(request.configKey(), request.configValue(), request.description()));
     }
 
-    @DeleteMapping("/configs/{id}")
+    /** 查看配置明文（需口令） */
+    @PostMapping("/configs/{id}/view")
     @PreAuthorize("hasRole('ROLE_ADMIN')")
-    public ApiResponse<Void> deleteConfig(@PathVariable Long id) {
-        adminService.deleteConfig(id);
+    public ApiResponse<String> viewConfig(
+            @PathVariable Long id,
+            @Valid @RequestBody ManagePasswordRequest request) {
+        String plainValue = adminService.decryptConfigValue(id, request.password());
+        return ApiResponse.ok(plainValue);
+    }
+
+    /** 更新配置（需口令，值自动加密） */
+    @PutMapping("/configs/{id}")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ApiResponse<SystemConfig> updateConfig(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateConfigRequest request) {
+        return ApiResponse.ok(adminService.updateConfig(
+            id, request.configValue(), request.description(), request.password()));
+    }
+
+    /** 删除配置（需口令） */
+    @PostMapping("/configs/{id}/delete")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public ApiResponse<Void> deleteConfig(
+            @PathVariable Long id,
+            @Valid @RequestBody ManagePasswordRequest request) {
+        adminService.deleteConfig(id, request.password());
         return ApiResponse.ok();
     }
 }

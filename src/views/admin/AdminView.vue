@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, Download, Search } from '@element-plus/icons-vue'
-import { getUsers, createUser, updateUser, toggleUser, resetPassword, getRoles, getCategories, createCategory, updateCategory, deleteCategory, getDepartments, createDepartment, updateDepartment, deleteDepartment, getSystems, createSystem, updateSystem, deleteSystem, getTeams, createTeam, updateTeam, deleteTeam, getOccasions, createOccasion, updateOccasion, deleteOccasion, getConfigs, saveConfig, deleteConfig, exportUsers, exportCategories, exportDepartments, exportSystems, exportTeams, exportOccasions } from '@/api/admin'
+import { Plus, Edit, Delete, Download, Search, View } from '@element-plus/icons-vue'
+import { getUsers, createUser, updateUser, toggleUser, resetPassword, getRoles, getCategories, createCategory, updateCategory, deleteCategory, getDepartments, createDepartment, updateDepartment, deleteDepartment, getDepartmentsPaged, getSystems, createSystem, updateSystem, deleteSystem, getSystemsPaged, getTeams, createTeam, updateTeam, deleteTeam, getOccasions, createOccasion, updateOccasion, deleteOccasion, getConfigs, saveConfig, viewConfigValue, updateConfig, deleteConfig, exportUsers, exportCategories, exportDepartments, exportSystems, exportTeams, exportOccasions } from '@/api/admin'
 
 const activeTab = ref('users')
 
@@ -18,6 +18,7 @@ const userFilters = reactive({
   username: '',
   name: '',
   department: '',
+  email: '',
   enabled: null,
 })
 
@@ -31,7 +32,7 @@ const createRules = {
 const createFormRef = ref(null)
 
 const editDialogVisible = ref(false)
-const editForm = reactive({ name: '', department: '', position: '', phone: '', enabled: true, roleIds: [] })
+const editForm = reactive({ name: '', department: '', position: '', phone: '', email: '', enabled: true, roleIds: [] })
 const editUserId = ref(null)
 const editRules = {
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
@@ -49,6 +50,7 @@ async function fetchUsers() {
   if (userFilters.username) params.username = userFilters.username
   if (userFilters.name) params.name = userFilters.name
   if (userFilters.department) params.department = userFilters.department
+  if (userFilters.email) params.email = userFilters.email
   if (userFilters.enabled !== null && userFilters.enabled !== '') params.enabled = userFilters.enabled
   const res = await getUsers(params)
   users.value = res.data?.content || []
@@ -99,6 +101,7 @@ function handleEdit(row) {
     department: row.department || '',
     position: row.position || '',
     phone: row.phone || '',
+    email: row.email || '',
     enabled: row.enabled,
     roleIds: row.roles.map(r => r.id),
   })
@@ -185,9 +188,25 @@ const departmentForm = reactive({ name: '', leader: '', enabled: true })
 const isDeptEdit = ref(false)
 const editDeptId = ref(null)
 
+// 部门分页
+const deptList = ref([])
+const deptPage = ref(1)
+const deptSize = ref(20)
+const deptTotal = ref(0)
+const deptKeyword = ref('')
+
 async function fetchDepartments() {
   const res = await getDepartments()
   departments.value = res.data || []
+}
+async function fetchDepartmentsPaged() {
+  const res = await getDepartmentsPaged({ page: deptPage.value - 1, size: deptSize.value, keyword: deptKeyword.value || undefined })
+  deptList.value = res.data?.content || []
+  deptTotal.value = res.data?.totalElements || 0
+}
+function handleDeptFilter() {
+  deptPage.value = 1
+  fetchDepartmentsPaged()
 }
 function handleAddDepartment() {
   isDeptEdit.value = false
@@ -206,6 +225,7 @@ async function handleDeleteDepartment(row) {
   await deleteDepartment(row.id)
   ElMessage.success('已删除')
   fetchDepartments()
+  fetchDepartmentsPaged()
 }
 async function handleDepartmentSubmit() {
   if (isDeptEdit.value) {
@@ -217,6 +237,7 @@ async function handleDepartmentSubmit() {
   }
   departmentDialogVisible.value = false
   fetchDepartments()
+  fetchDepartmentsPaged()
 }
 
 // === 所属系统管理 ===
@@ -225,27 +246,26 @@ const systemDialogVisible = ref(false)
 const systemForm = reactive({ code: '', name: '', leader: '', team: '', enabled: true })
 const isSysEdit = ref(false)
 const editSysId = ref(null)
-const sysFilters = reactive({ name: '', leader: '', team: '', enabled: '' })
 
-const filteredSystems = computed(() => {
-  return systems.value.filter(s => {
-    if (sysFilters.name) {
-      const names = Array.isArray(sysFilters.name) ? sysFilters.name : [sysFilters.name]
-      if (names.length > 0 && !names.some(n => s.name.toLowerCase().includes(n.toLowerCase()))) return false
-    }
-    if (sysFilters.leader && s.leader !== sysFilters.leader) return false
-    if (sysFilters.team && s.team !== sysFilters.team) return false
-    if (sysFilters.enabled !== '' && sysFilters.enabled !== null) {
-      if (sysFilters.enabled === 'enabled' && !s.enabled) return false
-      if (sysFilters.enabled === 'disabled' && s.enabled) return false
-    }
-    return true
-  })
-})
+// 系统分页
+const sysList = ref([])
+const sysPage = ref(1)
+const sysSize = ref(20)
+const sysTotal = ref(0)
+const sysKeyword = ref('')
 
 async function fetchSystems() {
   const res = await getSystems()
   systems.value = res.data || []
+}
+async function fetchSystemsPaged() {
+  const res = await getSystemsPaged({ page: sysPage.value - 1, size: sysSize.value, keyword: sysKeyword.value || undefined })
+  sysList.value = res.data?.content || []
+  sysTotal.value = res.data?.totalElements || 0
+}
+function handleSysFilter() {
+  sysPage.value = 1
+  fetchSystemsPaged()
 }
 function handleAddSystem() {
   isSysEdit.value = false
@@ -264,6 +284,7 @@ async function handleDeleteSystem(row) {
   await deleteSystem(row.id)
   ElMessage.success('已删除')
   fetchSystems()
+  fetchSystemsPaged()
 }
 async function handleSystemSubmit() {
   if (!systemForm.code || !/^\d{5}$/.test(systemForm.code)) {
@@ -280,6 +301,7 @@ async function handleSystemSubmit() {
     }
     systemDialogVisible.value = false
     fetchSystems()
+    fetchSystemsPaged()
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '操作失败')
   }
@@ -390,31 +412,88 @@ const configForm = reactive({ configKey: '', configValue: '', description: '' })
 const isConfigEdit = ref(false)
 const editConfigId = ref(null)
 
+// 口令弹窗
+const passwordDialogVisible = ref(false)
+const managePassword = ref('')
+const passwordAction = ref(null)  // 'view' | 'edit' | 'delete'
+const passwordTarget = ref(null)
+
 async function fetchConfigs() {
 	const res = await getConfigs()
 	configs.value = res.data || []
 }
+
 function handleAddConfig() {
 	isConfigEdit.value = false
 	editConfigId.value = null
 	Object.assign(configForm, { configKey: '', configValue: '', description: '' })
 	configDialogVisible.value = true
 }
+
+function handleViewConfig(row) {
+	passwordTarget.value = row
+	passwordAction.value = 'view'
+	managePassword.value = ''
+	passwordDialogVisible.value = true
+}
+
 function handleEditConfig(row) {
-	isConfigEdit.value = true
-	editConfigId.value = row.id
-	Object.assign(configForm, { configKey: row.configKey, configValue: row.configValue, description: row.description || '' })
-	configDialogVisible.value = true
+	passwordTarget.value = row
+	passwordAction.value = 'edit'
+	managePassword.value = ''
+	passwordDialogVisible.value = true
 }
-async function handleDeleteConfig(row) {
-	await ElMessageBox.confirm('确定删除该配置吗？', '提示', { type: 'warning' })
-	await deleteConfig(row.id)
-	ElMessage.success('已删除')
-	fetchConfigs()
+
+function handleDeleteConfig(row) {
+	passwordTarget.value = row
+	passwordAction.value = 'delete'
+	managePassword.value = ''
+	passwordDialogVisible.value = true
 }
+
+async function handlePasswordConfirm() {
+	if (!managePassword.value) {
+		ElMessage.warning('请输入口令')
+		return
+	}
+	const row = passwordTarget.value
+	try {
+		if (passwordAction.value === 'view') {
+			const res = await viewConfigValue(row.id, { password: managePassword.value })
+			ElMessageBox.alert(res.data, '配置值 — ' + row.configKey, {
+				confirmButtonText: '关闭',
+				customClass: 'config-value-dialog'
+			})
+		} else if (passwordAction.value === 'edit') {
+			const res = await viewConfigValue(row.id, { password: managePassword.value })
+			isConfigEdit.value = true
+			editConfigId.value = row.id
+			Object.assign(configForm, { configKey: row.configKey, configValue: res.data, description: row.description || '' })
+			configDialogVisible.value = true
+		} else if (passwordAction.value === 'delete') {
+			await ElMessageBox.confirm('确定删除该配置吗？', '提示', { type: 'warning' })
+			await deleteConfig(row.id, { password: managePassword.value })
+			ElMessage.success('已删除')
+			fetchConfigs()
+		}
+		passwordDialogVisible.value = false
+	} catch (e) {
+		// 错误已在拦截器中处理
+	}
+}
+
 async function handleConfigSubmit() {
-	await saveConfig(configForm)
-	ElMessage.success(isConfigEdit.value ? '已更新' : '已创建')
+	if (isConfigEdit.value) {
+		await updateConfig(editConfigId.value, {
+			configValue: configForm.configValue,
+			description: configForm.description,
+			password: managePassword.value
+		})
+		ElMessage.success('已更新')
+	} else {
+		await saveConfig(configForm)
+		ElMessage.success('已创建')
+	}
 	configDialogVisible.value = false
 	fetchConfigs()
 }
@@ -452,7 +531,9 @@ onMounted(() => {
   fetchRoles()
   fetchCategories()
   fetchDepartments()
+  fetchDepartmentsPaged()
   fetchSystems()
+  fetchSystemsPaged()
   fetchTeams()
   fetchOccasions()
   fetchConfigs()
@@ -474,6 +555,7 @@ onMounted(() => {
             <el-select v-model="userFilters.department" clearable filterable placeholder="部门" style="width: 180px" @change="handleUserFilter" @clear="handleUserFilter">
               <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.name" />
             </el-select>
+            <el-input v-model="userFilters.email" placeholder="邮箱" clearable style="width: 160px" @keyup.enter="handleUserFilter" @clear="handleUserFilter" />
             <el-select v-model="userFilters.enabled" clearable placeholder="状态" style="width: 100px" @change="handleUserFilter" @clear="handleUserFilter">
               <el-option label="启用" :value="true" />
               <el-option label="禁用" :value="false" />
@@ -486,6 +568,7 @@ onMounted(() => {
           <el-table-column prop="department" label="部门" min-width="160" />
 
           <el-table-column prop="phone" label="电话" min-width="130" />
+          <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip />
           <el-table-column label="角色" min-width="160">
             <template #default="{ row }">
               <el-tag v-for="r in row.roles" :key="r.id" size="small" style="margin-right: 4px">
@@ -556,11 +639,12 @@ onMounted(() => {
 
       <!-- 部门管理 -->
       <el-tab-pane label="部门管理" name="departments">
-        <div style="margin-bottom: 16px">
+        <div style="margin-bottom: 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
           <el-button type="primary" :icon="Plus" @click="handleAddDepartment">新增部门</el-button>
           <el-button :icon="Download" @click="handleExportDepartments">导出</el-button>
+          <el-input v-model="deptKeyword" placeholder="搜索部门" clearable style="width: 200px" @keyup.enter="handleDeptFilter" @clear="handleDeptFilter" />
         </div>
-        <el-table :data="departments" stripe border>
+        <el-table :data="deptList" stripe border>
           <el-table-column prop="name" label="部门名称" width="200" />
           <el-table-column prop="leader" label="部门负责人" width="120" />
           <el-table-column label="状态" width="100">
@@ -577,6 +661,17 @@ onMounted(() => {
             </template>
           </el-table-column>
         </el-table>
+        <div class="user-pagination">
+          <el-pagination
+            v-model:current-page="deptPage"
+            v-model:page-size="deptSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="deptTotal"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="fetchDepartmentsPaged"
+            @current-change="fetchDepartmentsPaged"
+          />
+        </div>
       </el-tab-pane>
 
       <!-- 信息系统管理 -->
@@ -584,31 +679,9 @@ onMounted(() => {
         <div style="margin-bottom: 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
           <el-button type="primary" :icon="Plus" @click="handleAddSystem">新增系统</el-button>
           <el-button :icon="Download" @click="handleExportSystems">导出</el-button>
-          <el-select
-            v-model="sysFilters.name"
-            multiple
-            filterable
-            clearable
-            placeholder="系统名称"
-            style="width: 200px"
-            collapse-tags
-            collapse-tags-tooltip
-          >
-            <el-option v-for="s in systems" :key="s.name" :label="s.name" :value="s.name" />
-          </el-select>
-          <el-select v-model="sysFilters.leader" placeholder="负责人" clearable style="width: 140px">
-            <el-option v-for="u in allUsers" :key="u.name" :label="u.name" :value="u.name" />
-          </el-select>
-          <el-select v-model="sysFilters.team" placeholder="所属团队" clearable style="width: 140px">
-            <el-option v-for="t in teams" :key="t.name" :label="t.name" :value="t.name" />
-          </el-select>
-          <el-select v-model="sysFilters.enabled" placeholder="状态" clearable style="width: 100px">
-            <el-option label="启用" value="enabled" />
-            <el-option label="禁用" value="disabled" />
-          </el-select>
-          <el-button :icon="Search" @click="() => {}">搜索</el-button>
+          <el-input v-model="sysKeyword" placeholder="搜索系统/负责人/团队" clearable style="width: 220px" @keyup.enter="handleSysFilter" @clear="handleSysFilter" />
         </div>
-        <el-table :data="filteredSystems" stripe border>
+        <el-table :data="sysList" stripe border>
           <el-table-column prop="code" label="系统编号" width="110" />
           <el-table-column prop="name" label="系统名称" width="180" />
           <el-table-column prop="leader" label="系统负责人" width="120" />
@@ -627,6 +700,17 @@ onMounted(() => {
             </template>
           </el-table-column>
         </el-table>
+        <div class="user-pagination">
+          <el-pagination
+            v-model:current-page="sysPage"
+            v-model:page-size="sysSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="sysTotal"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="fetchSystemsPaged"
+            @current-change="fetchSystemsPaged"
+          />
+        </div>
       </el-tab-pane>
 
       <!-- 团队管理 -->
@@ -672,15 +756,11 @@ onMounted(() => {
         </div>
         <el-table :data="configs" stripe border>
           <el-table-column prop="configKey" label="配置键" width="220" />
-          <el-table-column prop="configValue" label="配置值" min-width="300">
-            <template #default="{ row }">
-              <span v-if="row.configKey === 'deepseek.api.key'">{{ row.configValue ? row.configValue.substring(0, 12) + '****' + row.configValue.substring(row.configValue.length - 4) : '-' }}</span>
-              <span v-else>{{ row.configValue }}</span>
-            </template>
-          </el-table-column>
+          <el-table-column prop="configValue" label="配置值" min-width="300" />
           <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip />
-          <el-table-column label="操作" width="160" class-name="actions-col">
+          <el-table-column label="操作" width="200" class-name="actions-col">
             <template #default="{ row }">
+              <el-button type="primary" link :icon="View" @click="handleViewConfig(row)">查看</el-button>
               <el-button type="primary" link :icon="Edit" @click="handleEditConfig(row)">编辑</el-button>
               <el-button type="danger" link :icon="Delete" @click="handleDeleteConfig(row)">删除</el-button>
             </template>
@@ -766,6 +846,9 @@ onMounted(() => {
         </el-form-item>
         <el-form-item label="电话">
           <el-input v-model="editForm.phone" maxlength="20" />
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="editForm.email" maxlength="100" placeholder="user@example.com" />
         </el-form-item>
         <el-form-item label="状态">
           <el-switch v-model="editForm.enabled" active-text="启用" inactive-text="禁用" />
@@ -918,6 +1001,21 @@ onMounted(() => {
       <template #footer>
         <el-button @click="configDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleConfigSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 口令验证弹窗 -->
+    <el-dialog v-model="passwordDialogVisible" title="口令验证" width="380px" :close-on-click-modal="false">
+      <el-input
+        v-model="managePassword"
+        type="password"
+        placeholder="请输入管理口令"
+        show-password
+        @keyup.enter="handlePasswordConfirm"
+      />
+      <template #footer>
+        <el-button @click="passwordDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handlePasswordConfirm">确定</el-button>
       </template>
     </el-dialog>
 

@@ -27,3 +27,15 @@ export function bindWechat(data) {
 export function changePassword(data) {
   return request.put('/auth/password', data)
 }
+
+export function sendResetCode(data) {
+  return request.post('/auth/send-reset-code', data)
+}
+
+export function verifyResetCode(data) {
+  return request.post('/auth/verify-reset-code', data)
+}
+
+export function resetPassword(data) {
+  return request.post('/auth/reset-password', data)
+}

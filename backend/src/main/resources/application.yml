@@ -18,6 +18,14 @@ spring:
     open-in-view: false
 
 app:
+  encryption:
+    secret: ${ENCRYPTION_SECRET:tech-manage-default-encryption-key-32c}
+  mail:
+    host: ${MAIL_HOST:smtp.163.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    from: ${MAIL_FROM:}
   jwt:
     secret: tech-manage-jwt-secret-key-must-be-at-least-256-bits-long
     expiration-ms: 86400000

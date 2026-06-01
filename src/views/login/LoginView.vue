@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onUnmounted, nextTick } from 'vue'
+import { ref, onUnmounted, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { login, initQrLogin, pollQrStatus } from '@/api/auth'
@@ -10,6 +10,22 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const form = ref({ username: '', password: '' })
+
+// 忘记密码链接：将当前输入带过去，自动填充邮箱
+const forgotPasswordLink = computed(() => {
+  const input = form.value.username.trim()
+  if (!input) return '/forgot-password'
+  if (input.includes('@')) {
+    // 用户已输入邮箱 → 直接带过去
+    return `/forgot-password?email=${encodeURIComponent(input)}`
+  }
+  // 手机号（11位数字，1开头）→ 不带邮箱参数，让用户自行输入
+  if (/^1\d{10}$/.test(input)) {
+    return '/forgot-password'
+  }
+  // 用户输入的是用户名 → 拼接默认邮箱
+  return `/forgot-password?email=${encodeURIComponent(input + '@hxfl.com.cn')}`
+})
 const loading = ref(false)
 const errorMsg = ref('')
 const activeTab = ref('password')
@@ -114,7 +130,7 @@ onUnmounted(() => {
             <el-form-item>
               <el-input
                 v-model="form.username"
-                placeholder="用户名"
+                placeholder="用户名 / 邮箱 / 邮箱前缀 / 手机号"
                 prefix-icon="User"
               />
             </el-form-item>
@@ -127,6 +143,9 @@ onUnmounted(() => {
                 prefix-icon="Lock"
               />
             </el-form-item>
+            <div class="forgot-pwd-link">
+              <router-link :to="forgotPasswordLink">忘记密码？</router-link>
+            </div>
             <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
             <el-form-item>
               <el-button
@@ -221,6 +240,19 @@ onUnmounted(() => {
   font-size: 13px;
   margin-bottom: 16px;
   text-align: center;
+}
+.forgot-pwd-link {
+  text-align: right;
+  margin-top: -8px;
+  margin-bottom: 12px;
+}
+.forgot-pwd-link a {
+  color: var(--brand, #006eff);
+  font-size: 13px;
+  text-decoration: none;
+}
+.forgot-pwd-link a:hover {
+  text-decoration: underline;
 }
 .hint {
   text-align: center;

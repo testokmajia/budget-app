@@ -1,5 +1,7 @@
 package com.techmanage.security;
 
+import com.techmanage.util.EncryptionUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -48,5 +50,11 @@ public class SecurityConfig {
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
+    }
+
+    @Bean
+    public EncryptionUtil encryptionUtil(
+            @Value("${app.encryption.secret}") String secret) {
+        return new EncryptionUtil(secret);
     }
 }

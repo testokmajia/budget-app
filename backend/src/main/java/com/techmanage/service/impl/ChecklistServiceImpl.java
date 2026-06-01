@@ -3,6 +3,7 @@ package com.techmanage.service.impl;
 import com.techmanage.common.BusinessException;
 import com.techmanage.dto.ChecklistRequest;
 import com.techmanage.dto.ChecklistResponse;
+import com.techmanage.dto.PageResponse;
 import com.techmanage.entity.Checklist;
 import com.techmanage.repository.ChecklistRepository;
 import com.techmanage.repository.UserRepository;
@@ -26,9 +27,10 @@ public class ChecklistServiceImpl implements ChecklistService {
     }
 
     @Override
-    public List<ChecklistResponse> list(Long userId, List<String> status, String keyword,
-                                         String responsiblePerson, LocalDate startDate, LocalDate endDate) {
-        return checklistRepository.findByUserId(userId).stream()
+    public PageResponse<ChecklistResponse> list(Long userId, List<String> status, String keyword,
+                                                 String responsiblePerson, LocalDate startDate, LocalDate endDate,
+                                                 int page, int size) {
+        List<ChecklistResponse> all = checklistRepository.findByUserId(userId).stream()
             .filter(c -> status == null || status.isEmpty() || status.contains(c.getStatus()))
             .filter(c -> keyword == null || keyword.isEmpty() || c.getDescription().contains(keyword))
             .filter(c -> responsiblePerson == null || responsiblePerson.isEmpty() ||
@@ -42,6 +44,13 @@ public class ChecklistServiceImpl implements ChecklistService {
             })
             .map(this::toResponse)
             .toList();
+
+        int fromIndex = page * size;
+        int toIndex = Math.min(fromIndex + size, all.size());
+        List<ChecklistResponse> content = fromIndex < all.size()
+            ? all.subList(fromIndex, toIndex)
+            : List.of();
+        return PageResponse.of(content, all.size(), page, size);
     }
 
     @Override

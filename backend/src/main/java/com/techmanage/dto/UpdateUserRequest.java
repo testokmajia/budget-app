@@ -9,6 +9,7 @@ public record UpdateUserRequest(
     String department,
     String position,
     String phone,
+    String email,
     boolean enabled,
     List<Long> roleIds
 ) {}

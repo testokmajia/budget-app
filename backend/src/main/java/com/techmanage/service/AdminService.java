@@ -21,7 +21,7 @@ import java.util.List;
 
 public interface AdminService {
     // 用户管理
-    PageResponse<UserResponse> listUsers(int page, int size, String username, String name, String department, Boolean enabled);
+    PageResponse<UserResponse> listUsers(int page, int size, String username, String name, String department, String email, Boolean enabled);
     UserResponse createUser(CreateUserRequest request);
     UserResponse updateUser(Long userId, UpdateUserRequest request);
     UserResponse toggleUserEnabled(Long userId);
@@ -36,12 +36,14 @@ public interface AdminService {
 
     // 部门管理
     List<Department> listDepartments();
+    PageResponse<Department> listDepartmentsPaged(int page, int size, String keyword);
     Department createDepartment(DepartmentRequest request);
     Department updateDepartment(Long id, DepartmentRequest request);
     void deleteDepartment(Long id);
 
     // 所属系统管理
     List<SystemInfo> listSystems();
+    PageResponse<SystemInfo> listSystemsPaged(int page, int size, String keyword);
     SystemInfo createSystem(SystemInfoRequest request);
     SystemInfo updateSystem(Long id, SystemInfoRequest request);
     void deleteSystem(Long id);
@@ -61,5 +63,7 @@ public interface AdminService {
     // 系统配置管理
     List<SystemConfig> listConfigs();
     SystemConfig saveConfig(String configKey, String configValue, String description);
-    void deleteConfig(Long id);
+    String decryptConfigValue(Long id, String password);
+    SystemConfig updateConfig(Long id, String configValue, String description, String password);
+    void deleteConfig(Long id, String password);
 }

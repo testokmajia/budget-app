@@ -29,6 +29,7 @@ import com.techmanage.repository.TeamRepository;
 import com.techmanage.repository.UserRepository;
 import com.techmanage.service.AdminService;
 import jakarta.persistence.criteria.Predicate;
+import com.techmanage.util.EncryptionUtil;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -55,6 +56,7 @@ public class AdminServiceImpl implements AdminService {
     private final IssueFeedbackRepository issueFeedbackRepository;
     private final SystemConfigRepository systemConfigRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EncryptionUtil encryptionUtil;
 
     public AdminServiceImpl(UserRepository userRepository,
                            RoleRepository roleRepository,
@@ -65,7 +67,8 @@ public class AdminServiceImpl implements AdminService {
                            IssueOccasionRepository occasionRepository,
                            IssueFeedbackRepository issueFeedbackRepository,
                            SystemConfigRepository systemConfigRepository,
-                           PasswordEncoder passwordEncoder) {
+                           PasswordEncoder passwordEncoder,
+                           EncryptionUtil encryptionUtil) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.categoryRepository = categoryRepository;
@@ -76,10 +79,11 @@ public class AdminServiceImpl implements AdminService {
         this.issueFeedbackRepository = issueFeedbackRepository;
         this.systemConfigRepository = systemConfigRepository;
         this.passwordEncoder = passwordEncoder;
+        this.encryptionUtil = encryptionUtil;
     }
 
     @Override
-    public PageResponse<UserResponse> listUsers(int page, int size, String username, String name, String department, Boolean enabled) {
+    public PageResponse<UserResponse> listUsers(int page, int size, String username, String name, String department, String email, Boolean enabled) {
         Specification<User> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (username != null && !username.isBlank()) {
@@ -90,6 +94,9 @@ public class AdminServiceImpl implements AdminService {
             }
             if (department != null && !department.isBlank()) {
                 predicates.add(cb.equal(root.get("department"), department));
+            }
+            if (email != null && !email.isBlank()) {
+                predicates.add(cb.like(root.get("email"), "%" + email.trim() + "%"));
             }
             if (enabled != null) {
                 predicates.add(cb.equal(root.get("enabled"), enabled));
@@ -149,6 +156,7 @@ public class AdminServiceImpl implements AdminService {
         user.setDepartment(request.department());
         user.setPosition(request.position());
         user.setPhone(request.phone());
+        user.setEmail(request.email());
         user.setEnabled(request.enabled());
         if (request.roleIds() != null && !request.roleIds().isEmpty()) {
             List<Role> roles = roleRepository.findAllById(request.roleIds());
@@ -204,6 +212,20 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    public PageResponse<Department> listDepartmentsPaged(int page, int size, String keyword) {
+        Specification<Department> spec = (root, query, cb) -> {
+            List<Predicate> preds = new ArrayList<>();
+            if (keyword != null && !keyword.isBlank()) {
+                preds.add(cb.like(root.get("name"), "%" + keyword.trim() + "%"));
+            }
+            return cb.and(preds.toArray(new Predicate[0]));
+        };
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"));
+        Page<Department> result = departmentRepository.findAll(spec, pageable);
+        return PageResponse.of(result.getContent(), result.getTotalElements(), page, size);
+    }
+
+    @Override
     public Department createDepartment(DepartmentRequest request) {
         Department department = new Department();
         department.setName(request.name());
@@ -237,6 +259,25 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public List<SystemInfo> listSystems() {
         return systemInfoRepository.findAllByOrderByIdAsc();
+    }
+
+    @Override
+    public PageResponse<SystemInfo> listSystemsPaged(int page, int size, String keyword) {
+        Specification<SystemInfo> spec = (root, query, cb) -> {
+            List<Predicate> preds = new ArrayList<>();
+            if (keyword != null && !keyword.isBlank()) {
+                String kw = "%" + keyword.trim() + "%";
+                preds.add(cb.or(
+                    cb.like(root.get("name"), kw),
+                    cb.like(root.get("leader"), kw),
+                    cb.like(root.get("team"), kw)
+                ));
+            }
+            return cb.and(preds.toArray(new Predicate[0]));
+        };
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id"));
+        Page<SystemInfo> result = systemInfoRepository.findAll(spec, pageable);
+        return PageResponse.of(result.getContent(), result.getTotalElements(), page, size);
     }
 
     @Override
@@ -344,13 +385,49 @@ public class AdminServiceImpl implements AdminService {
         occasionRepository.deleteById(id);
     }
 
+    // ===== 系统配置管理 =====
+
+    /** 验证管理口令 */
+    private void verifyManagePassword(String password) {
+        var opt = systemConfigRepository.findByConfigKey("manage.password");
+        if (opt.isEmpty()) return; // 未设置，跳过验证
+        String stored = opt.get().getConfigValue();
+        String decrypted;
+        try {
+            decrypted = encryptionUtil.decrypt(stored);
+        } catch (Exception e) {
+            // 兼容旧明文数据（尚未被加密的旧值）
+            decrypted = stored;
+        }
+        if (!decrypted.equals(password)) {
+            throw new BusinessException("口令错误");
+        }
+    }
+
+    /** 配置值脱敏 */
+    private String maskValue(String configKey, String value) {
+        if (value == null || value.isEmpty()) return "";
+        // manage.password 始终完全隐藏
+        if ("manage.password".equals(configKey)) return "********";
+        // 解密后按长度脱敏
+        if (value.length() <= 6) return "******";
+        return value.substring(0, 3) + "****";
+    }
+
     @Override
     public List<SystemConfig> listConfigs() {
-        return systemConfigRepository.findAll();
+        List<SystemConfig> configs = systemConfigRepository.findAll();
+        for (SystemConfig c : configs) {
+            String plain = safeDecrypt(c.getConfigValue());
+            c.setConfigValue(maskValue(c.getConfigKey(), plain));
+        }
+        return configs;
     }
 
     @Override
     public SystemConfig saveConfig(String configKey, String configValue, String description) {
+        // 加密后存储
+        String encrypted = encryptionUtil.encrypt(configValue);
         var existing = systemConfigRepository.findByConfigKey(configKey);
         SystemConfig config;
         if (existing.isPresent()) {
@@ -359,13 +436,41 @@ public class AdminServiceImpl implements AdminService {
             config = new SystemConfig();
             config.setConfigKey(configKey);
         }
-        config.setConfigValue(configValue);
+        config.setConfigValue(encrypted);
+        if (description != null) config.setDescription(description);
+        return systemConfigRepository.save(config);
+    }
+
+    /** 安全解密：先尝试解密，失败则当作明文返回（兼容旧数据） */
+    private String safeDecrypt(String value) {
+        try {
+            return encryptionUtil.decrypt(value);
+        } catch (Exception e) {
+            return value;
+        }
+    }
+
+    @Override
+    public String decryptConfigValue(Long id, String password) {
+        verifyManagePassword(password);
+        SystemConfig config = systemConfigRepository.findById(id)
+            .orElseThrow(() -> new BusinessException("配置不存在"));
+        return safeDecrypt(config.getConfigValue());
+    }
+
+    @Override
+    public SystemConfig updateConfig(Long id, String configValue, String description, String password) {
+        verifyManagePassword(password);
+        SystemConfig config = systemConfigRepository.findById(id)
+            .orElseThrow(() -> new BusinessException("配置不存在"));
+        config.setConfigValue(encryptionUtil.encrypt(configValue));
         if (description != null) config.setDescription(description);
         return systemConfigRepository.save(config);
     }
 
     @Override
-    public void deleteConfig(Long id) {
+    public void deleteConfig(Long id, String password) {
+        verifyManagePassword(password);
         systemConfigRepository.deleteById(id);
     }
 
@@ -376,6 +481,7 @@ public class AdminServiceImpl implements AdminService {
         return new UserResponse(
             user.getId(), user.getUsername(), user.getName(),
             user.getDepartment(), user.getPosition(), user.getPhone(),
+            user.getEmail(),
             user.isEnabled(), roles, user.getCreatedAt()
         );
     }

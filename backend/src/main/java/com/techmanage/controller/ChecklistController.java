@@ -3,6 +3,7 @@ package com.techmanage.controller;
 import com.techmanage.common.ApiResponse;
 import com.techmanage.dto.ChecklistRequest;
 import com.techmanage.dto.ChecklistResponse;
+import com.techmanage.dto.PageResponse;
 import com.techmanage.service.ChecklistService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -23,14 +24,16 @@ public class ChecklistController {
     }
 
     @GetMapping
-    public ApiResponse<List<ChecklistResponse>> list(
+    public ApiResponse<PageResponse<ChecklistResponse>> list(
             @AuthenticationPrincipal Long userId,
             @RequestParam(required = false) List<String> status,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String responsiblePerson,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return ApiResponse.ok(checklistService.list(userId, status, keyword, responsiblePerson, startDate, endDate));
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(checklistService.list(userId, status, keyword, responsiblePerson, startDate, endDate, page, size));
     }
 
     @GetMapping("/{id}")

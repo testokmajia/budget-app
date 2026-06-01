@@ -10,6 +10,7 @@ public record UserResponse(
     String department,
     String position,
     String phone,
+    String email,
     boolean enabled,
     List<RoleInfo> roles,
     LocalDateTime createdAt

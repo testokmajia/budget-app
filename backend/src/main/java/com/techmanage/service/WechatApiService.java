@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techmanage.common.BusinessException;
 import com.techmanage.repository.SystemConfigRepository;
+import com.techmanage.util.EncryptionUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -22,35 +23,42 @@ public class WechatApiService {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final SystemConfigRepository systemConfigRepository;
+    private final EncryptionUtil encryptionUtil;
 
     public WechatApiService(
             @Value("${wechat.miniapp.app-id:}") String appId,
             @Value("${wechat.miniapp.secret:}") String secret,
             ObjectMapper objectMapper,
-            SystemConfigRepository systemConfigRepository) {
+            SystemConfigRepository systemConfigRepository,
+            EncryptionUtil encryptionUtil) {
         this.appId = appId;
         this.secret = secret;
         this.httpClient = HttpClient.newHttpClient();
         this.objectMapper = objectMapper;
         this.systemConfigRepository = systemConfigRepository;
+        this.encryptionUtil = encryptionUtil;
+    }
+
+    /** 从数据库读取配置并尝试解密 */
+    private String resolveConfig(String key, String fallback) {
+        var dbConfig = systemConfigRepository.findByConfigKey(key);
+        if (dbConfig.isPresent() && dbConfig.get().getConfigValue() != null
+            && !dbConfig.get().getConfigValue().isBlank()) {
+            try {
+                return encryptionUtil.decrypt(dbConfig.get().getConfigValue());
+            } catch (Exception e) {
+                return dbConfig.get().getConfigValue();
+            }
+        }
+        return fallback;
     }
 
     private String resolveAppId() {
-        var dbConfig = systemConfigRepository.findByConfigKey("wechat.miniapp.app-id");
-        if (dbConfig.isPresent() && dbConfig.get().getConfigValue() != null
-            && !dbConfig.get().getConfigValue().isBlank()) {
-            return dbConfig.get().getConfigValue();
-        }
-        return appId;
+        return resolveConfig("wechat.miniapp.app-id", appId);
     }
 
     private String resolveSecret() {
-        var dbConfig = systemConfigRepository.findByConfigKey("wechat.miniapp.secret");
-        if (dbConfig.isPresent() && dbConfig.get().getConfigValue() != null
-            && !dbConfig.get().getConfigValue().isBlank()) {
-            return dbConfig.get().getConfigValue();
-        }
-        return secret;
+        return resolveConfig("wechat.miniapp.secret", secret);
     }
 
     public record WechatSession(String openId, String sessionKey, String unionId) {}

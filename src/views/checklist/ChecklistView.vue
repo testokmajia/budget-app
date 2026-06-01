@@ -13,6 +13,11 @@ const currentUserName = userStore.user?.name
 const loading = ref(false)
 const tableData = ref([])
 const allUsers = ref([])
+
+// 分页
+const currentPage = ref(1)
+const pageSize = ref(20)
+const totalItems = ref(0)
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const isEdit = ref(false)
@@ -106,14 +111,19 @@ function getRowActions(row) {
 async function fetchData() {
   loading.value = true
   try {
-    const params = {}
+    const params = {
+      page: currentPage.value - 1,
+      size: pageSize.value,
+    }
     if (searchForm.status && searchForm.status.length > 0) params.status = searchForm.status
     if (searchForm.keyword) params.keyword = searchForm.keyword
     if (searchForm.responsiblePerson) params.responsiblePerson = searchForm.responsiblePerson
     if (searchForm.startDate) params.startDate = searchForm.startDate
     if (searchForm.endDate) params.endDate = searchForm.endDate
     const res = await getList(params)
-    tableData.value = (res.data || []).map(row => {
+    const content = res.data?.content || []
+    totalItems.value = res.data?.totalElements || 0
+    tableData.value = content.map(row => {
       const actions = getRowActions(row)
       row._primary = actions.length > 0 ? actions[0] : null
       row._secondary = actions.length > 1 ? actions.slice(1) : []
@@ -122,6 +132,22 @@ async function fetchData() {
   } finally {
     loading.value = false
   }
+}
+
+function handleSearch() {
+  currentPage.value = 1
+  fetchData()
+}
+
+function handlePageChange(page) {
+  currentPage.value = page
+  fetchData()
+}
+
+function handleSizeChange(size) {
+  pageSize.value = size
+  currentPage.value = 1
+  fetchData()
 }
 
 async function loadUsers() {
@@ -145,7 +171,7 @@ function resetForm() {
 }
 
 function handleAdd() {
-  dialogTitle.value = '新建清单'
+  dialogTitle.value = '新建事项'
   isEdit.value = false
   editId.value = null
   resetForm()
@@ -153,7 +179,7 @@ function handleAdd() {
 }
 
 function handleEdit(row) {
-  dialogTitle.value = '编辑清单'
+  dialogTitle.value = '编辑事项'
   isEdit.value = true
   editId.value = row.id
   Object.assign(form, {
@@ -224,18 +250,15 @@ onUnmounted(() => {
 
 <template>
   <div class="page-container">
-    <div class="page-header">
-      <el-button type="primary" :icon="Plus" @click="handleAdd">新建清单</el-button>
-    </div>
-
     <div class="search-bar">
-      <el-select v-model="searchForm.status" multiple placeholder="事项状态" clearable style="width: 200px" @change="fetchData">
+      <el-button type="primary" :icon="Plus" @click="handleAdd">新建事项</el-button>
+      <el-select v-model="searchForm.status" multiple placeholder="事项状态" clearable style="width: 200px" @change="handleSearch">
         <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
       </el-select>
-      <el-input v-model="searchForm.responsiblePerson" placeholder="责任人" clearable style="width: 120px" @input="fetchData" />
-      <el-date-picker v-model="searchForm.startDate" type="date" placeholder="完成日期起始" value-format="YYYY-MM-DD" style="width: 150px" @change="fetchData" />
-      <el-date-picker v-model="searchForm.endDate" type="date" placeholder="完成日期截止" value-format="YYYY-MM-DD" style="width: 150px" @change="fetchData" />
-      <el-input v-model="searchForm.keyword" placeholder="搜索关键词" clearable style="width: 200px" @input="fetchData">
+      <el-input v-model="searchForm.responsiblePerson" placeholder="责任人" clearable style="width: 120px" @input="handleSearch" />
+      <el-date-picker v-model="searchForm.startDate" type="date" placeholder="完成日期起始" value-format="YYYY-MM-DD" style="width: 150px" @change="handleSearch" />
+      <el-date-picker v-model="searchForm.endDate" type="date" placeholder="完成日期截止" value-format="YYYY-MM-DD" style="width: 150px" @change="handleSearch" />
+      <el-input v-model="searchForm.keyword" placeholder="搜索关键词" clearable style="width: 200px" @input="handleSearch">
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
     </div>
@@ -276,6 +299,18 @@ onUnmounted(() => {
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="user-pagination">
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="totalItems"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="handleSizeChange"
+        @current-change="handlePageChange"
+      />
+    </div>
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="560px" @keyup.enter="handleSubmit">
       <el-form :model="form" :rules="rules" label-width="100px">
@@ -358,21 +393,18 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-.page-header h2 {
-  margin: 0;
-}
 .search-bar {
   display: flex;
   gap: 10px;
   margin-bottom: 16px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.user-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .action-btns {
