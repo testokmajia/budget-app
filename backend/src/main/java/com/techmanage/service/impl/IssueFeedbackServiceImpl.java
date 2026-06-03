@@ -63,7 +63,7 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
 
     @Override
     public PageResponse<IssueResponse> list(int page, int size, String sortBy, String sortDir,
-            List<String> statuses, List<Long> submitterIds, List<String> submitterDepartments,
+            String keyword, List<String> statuses, List<Long> submitterIds, List<String> submitterDepartments,
             Long occasionId, String issueType, String responsibleTeam,
             Long responsiblePersonId, LocalDate dateFrom, LocalDate dateTo,
             Long currentUserId, boolean isAdmin, boolean isIssueAdmin,
@@ -110,6 +110,14 @@ public class IssueFeedbackServiceImpl implements IssueFeedbackService {
             }
             if (responsiblePersonId != null) {
                 predicates.add(cb.equal(root.get("responsiblePersonId"), responsiblePersonId));
+            }
+            if (keyword != null && !keyword.isBlank()) {
+                String kw = "%" + keyword.toLowerCase() + "%";
+                predicates.add(cb.or(
+                    cb.like(cb.lower(root.get("title")), kw),
+                    cb.like(cb.lower(root.get("description")), kw),
+                    cb.like(cb.lower(root.get("issueCode")), kw)
+                ));
             }
             if (dateFrom != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), dateFrom.atStartOfDay()));

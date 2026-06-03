@@ -55,6 +55,20 @@ const deptTotal = computed(() => {
   return stats.value.personnelDistribution.reduce((sum, p) => sum + p.memberCount, 0)
 })
 
+const reqSegments = computed(() => {
+  const rs = stats.value?.requirementStats
+  if (!rs || rs.total === 0) return []
+  return [
+    { label: '审批中', count: rs.inApproval, color: '#fa8c16' },
+    { label: '已确认', count: rs.confirmed, color: '#2f54eb' },
+    { label: '实施中', count: rs.inProgress, color: '#1890ff' },
+    { label: '测试通过', count: rs.testPassed, color: '#52c41a' },
+    { label: '已投产', count: rs.production, color: '#13c2c2' },
+    { label: '已关闭', count: rs.closed, color: '#8c8c8c' },
+    { label: '已驳回', count: rs.rejected, color: '#f5222d' },
+  ].filter(s => s.count > 0)
+})
+
 onMounted(async () => {
   try {
     const res = await getStats()
@@ -68,49 +82,28 @@ onMounted(async () => {
 <template>
   <div class="page-container" v-loading="loading">
     <template v-if="stats">
-      <!-- Stat cards -->
-      <div class="stat-cards">
-        <div class="stat-card">
-          <div class="stat-accent blue"></div>
-          <div class="stat-icon-box blue">
-            <el-icon :size="22"><DataBoard /></el-icon>
-          </div>
-          <div class="stat-body">
-            <div class="stat-value">{{ totalIssues }}</div>
-            <div class="stat-label">问题总数</div>
-          </div>
+      <!-- 需求概览 -->
+      <div class="req-overview" v-if="reqSegments.length">
+        <div class="req-header">
+          <span class="req-dot"></span>
+          <span class="req-title">需求概览</span>
+          <span class="req-total">共 {{ stats.requirementStats.total }} 项</span>
         </div>
-        <div class="stat-card">
-          <div class="stat-accent orange"></div>
-          <div class="stat-icon-box orange">
-            <el-icon :size="22"><Clock /></el-icon>
-          </div>
-          <div class="stat-body">
-            <div class="stat-value">{{ activeIssues }}</div>
-            <div class="stat-label">处理中</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-accent red"></div>
-          <div class="stat-icon-box red">
-            <el-icon :size="22"><WarningFilled /></el-icon>
-          </div>
-          <div class="stat-body">
-            <div class="stat-value">{{ stats.overdue.temporaryOverdue + stats.overdue.permanentOverdue }}</div>
-            <div class="stat-label">已超期</div>
-            <div class="stat-sub" v-if="stats.overdue.temporaryOverdue > 0 || stats.overdue.permanentOverdue > 0">
-              临时 {{ stats.overdue.temporaryOverdue }} · 永久 {{ stats.overdue.permanentOverdue }}
+        <div class="req-bar-wrap">
+          <div class="req-bar">
+            <div
+              v-for="seg in reqSegments" :key="seg.label"
+              class="req-seg"
+              :style="{ flex: seg.count, background: seg.color }"
+            >
+              <span class="req-seg-label" v-if="seg.count >= Math.max(...reqSegments.map(s=>s.count)) * 0.3">{{ seg.label }}</span>
             </div>
           </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-accent green"></div>
-          <div class="stat-icon-box green">
-            <el-icon :size="22"><CircleCheckFilled /></el-icon>
-          </div>
-          <div class="stat-body">
-            <div class="stat-value">{{ completedIssues }}</div>
-            <div class="stat-label">已完成</div>
+          <div class="req-legend">
+            <span v-for="seg in reqSegments" :key="seg.label" class="req-lg-item">
+              <i class="req-lg-dot" :style="{ background: seg.color }"></i>
+              {{ seg.label }} <b>{{ seg.count }}</b>
+            </span>
           </div>
         </div>
       </div>
@@ -277,68 +270,26 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* Stat cards */
-.stat-cards {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+/* 需求概览 */
+.req-overview {
+  background: #faf5ff; border-radius: 12px; padding: 16px 24px; margin-bottom: 20px;
 }
-.stat-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 20px 24px;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: var(--card-shadow);
-  transition: box-shadow 0.2s;
-  overflow: hidden;
+.req-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.req-dot { width: 8px; height: 8px; border-radius: 50%; background: #722ed1; flex-shrink: 0; }
+.req-title { font-size: 14px; font-weight: 600; color: #333; }
+.req-total { font-size: 12px; color: #999; margin-left: auto; }
+.req-bar-wrap { }
+.req-bar { display: flex; height: 32px; border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+.req-seg {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 4px; transition: opacity .15s; cursor: default;
 }
-.stat-card:hover {
-  box-shadow: var(--card-shadow-hover);
-}
-.stat-accent {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-}
-.stat-accent.blue  { background: #1890ff; }
-.stat-accent.orange { background: #fa8c16; }
-.stat-accent.red   { background: #f5222d; }
-.stat-accent.green { background: #52c41a; }
-.stat-icon-box {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.stat-icon-box.blue  { background: #e6f7ff; color: #1890ff; }
-.stat-icon-box.orange { background: #fff7e6; color: #fa8c16; }
-.stat-icon-box.red   { background: #fff1f0; color: #f5222d; }
-.stat-icon-box.green { background: #f6ffed; color: #52c41a; }
-.stat-value {
-  font-size: 28px;
-  font-weight: 600;
-  color: rgba(0,0,0,0.85);
-  line-height: 1.2;
-}
-.stat-label {
-  font-size: 13px;
-  color: rgba(0,0,0,0.45);
-  margin-top: 2px;
-}
-.stat-sub {
-  font-size: 11px;
-  color: rgba(0,0,0,0.25);
-  margin-top: 2px;
-}
+.req-seg:hover { opacity: .85; }
+.req-seg-label { font-size: 11px; color: #fff; font-weight: 600; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.req-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.req-lg-item { font-size: 12px; color: #555; display: inline-flex; align-items: center; gap: 5px; }
+.req-lg-item b { color: #333; }
+.req-lg-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 
 /* Chart cards */
 .charts-row {
@@ -586,12 +537,8 @@ onMounted(async () => {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .ranking-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .stat-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  .req-overview { padding: 12px 16px; }
+  .ranking-grid { grid-template-columns: repeat(2, 1fr); }
   .charts-row .el-col {
     flex: 0 0 100%;
     max-width: 100%;
@@ -606,9 +553,8 @@ onMounted(async () => {
   color: #86909c;
 }
 @media (max-width: 480px) {
-  .stat-cards {
-    grid-template-columns: 1fr;
-  }
+  .req-legend { gap: 2px 8px; }
+  .req-lg-item { font-size: 10px; }
   .overdue-cards {
     flex-direction: column;
   }

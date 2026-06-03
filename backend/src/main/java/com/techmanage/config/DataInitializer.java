@@ -46,6 +46,7 @@ public class DataInitializer implements CommandLineRunner {
         createRoleIfAbsent("ROLE_CLERK", "部门文书", "管理部门奖惩记录");
         createRoleIfAbsent("ROLE_ISSUE_ADMIN", "问题管理员", "问题分派、分类管理");
         createRoleIfAbsent("ROLE_ADMIN", "系统管理员", "用户管理、角色分配、系统配置");
+        createRoleIfAbsent("ROLE_ARCHITECT", "架构管理岗", "需求审批-评估涉及系统");
     }
 
     private void createRoleIfAbsent(String code, String name, String desc) {

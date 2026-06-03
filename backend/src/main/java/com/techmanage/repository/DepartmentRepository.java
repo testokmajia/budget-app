@@ -9,4 +9,5 @@ import java.util.List;
 public interface DepartmentRepository extends JpaRepository<Department, Long>, JpaSpecificationExecutor<Department> {
     List<Department> findAllByOrderByIdAsc();
     boolean existsByName(String name);
+    List<Department> findByEnabledTrue();
 }

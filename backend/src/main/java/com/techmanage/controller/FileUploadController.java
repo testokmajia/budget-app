@@ -45,13 +45,14 @@ public class FileUploadController {
         this.attachmentRepository = attachmentRepository;
         try {
             Files.createDirectories(this.uploadDir);
+            Files.createDirectories(this.uploadDir.resolve("request"));
+            Files.createDirectories(this.uploadDir.resolve("testdoc"));
         } catch (IOException e) {
             throw new BusinessException("Cannot create upload directory", e);
         }
     }
 
-    @PostMapping("/files/upload")
-    public ApiResponse<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) throws IOException {
+    private Map<String, Object> doUpload(MultipartFile file, String subDir) throws IOException {
         if (file.getSize() > MAX_FILE_SIZE) {
             throw new BusinessException("文件大小不能超过20MB");
         }
@@ -64,12 +65,50 @@ public class FileUploadController {
             throw new BusinessException("不支持的文件类型: " + ext);
         }
         String storedName = UUID.randomUUID() + ext;
-        Path target = uploadDir.resolve(storedName);
+        Path targetDir = subDir != null ? uploadDir.resolve(subDir) : uploadDir;
+        Files.createDirectories(targetDir);
+        Path target = targetDir.resolve(storedName);
         Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-        return ApiResponse.ok(Map.of(
-            "fileName", originalName != null ? originalName : storedName,
-            "filePath", "/uploads/" + storedName
-        ));
+        String filePath = subDir != null ? "/uploads/" + subDir + "/" + storedName : "/uploads/" + storedName;
+        return Map.of("fileName", originalName != null ? originalName : storedName, "filePath", filePath);
+    }
+
+    @PostMapping("/files/upload")
+    public ApiResponse<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.ok(doUpload(file, null));
+    }
+
+    @PostMapping("/files/upload/request")
+    public ApiResponse<Map<String, Object>> uploadRequest(@RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.ok(doUpload(file, "request"));
+    }
+
+    @PostMapping("/files/upload/testdoc")
+    public ApiResponse<Map<String, Object>> uploadTestDoc(@RequestParam("file") MultipartFile file) throws IOException {
+        return ApiResponse.ok(doUpload(file, "testdoc"));
+    }
+
+    @GetMapping("/files/download")
+    public ResponseEntity<Resource> downloadByPath(@RequestParam String path) {
+        if (path == null || path.isBlank()) throw new BusinessException("文件路径为空");
+        // 安全校验：只允许 /uploads/ 下的文件
+        if (!path.startsWith("/uploads/")) throw new BusinessException("非法的文件路径");
+        String relativePath = path.substring("/uploads/".length());
+        Path target = uploadDir.resolve(relativePath).normalize();
+        if (!target.startsWith(uploadDir)) throw new BusinessException("非法的文件路径");
+        Resource resource;
+        try { resource = new UrlResource(target.toUri().toURL()); }
+        catch (MalformedURLException e) { throw new BusinessException("文件路径无效", e); }
+        if (!resource.exists()) throw new BusinessException("文件不存在");
+        String fileName = target.getFileName().toString();
+        String contentType = URLConnection.guessContentTypeFromName(fileName);
+        if (contentType == null) contentType = "application/octet-stream";
+        String encodedName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + encodedName + "\"; filename*=UTF-8''" + encodedName)
+                .body(resource);
     }
 
     @PostMapping("/issues/{id}/attachments")

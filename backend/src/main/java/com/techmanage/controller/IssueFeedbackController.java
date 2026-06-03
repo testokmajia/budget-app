@@ -79,13 +79,14 @@ public class IssueFeedbackController {
             @RequestParam(required = false) String issueType,
             @RequestParam(required = false) String responsibleTeam,
             @RequestParam(required = false) Long responsiblePersonId,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) LocalDate dateFrom,
             @RequestParam(required = false) LocalDate dateTo,
             @RequestParam(defaultValue = "true") boolean myScope) {
         User u = currentUser(auth);
         boolean isItEmployee = "信息科技部".equals(u.getDepartment());
         List<Long> teamMemberIds = isItEmployee ? getTeamMemberIds(u) : Collections.emptyList();
-        return ApiResponse.ok(issueService.list(page, size, sortBy, sortDir,
+        return ApiResponse.ok(issueService.list(page, size, sortBy, sortDir, keyword,
                 statuses, submitterIds, submitterDepartments, occasionId, issueType,
                 responsibleTeam, responsiblePersonId, dateFrom, dateTo,
                 u.getId(), isAdmin(u), isIssueAdmin(u), isItEmployee, myScope, teamMemberIds));
@@ -197,7 +198,7 @@ public class IssueFeedbackController {
         User u = currentUser(auth);
         boolean isItEmployee = "信息科技部".equals(u.getDepartment());
         List<Long> teamMemberIds = isItEmployee ? getTeamMemberIds(u) : Collections.emptyList();
-        var result = issueService.list(0, Integer.MAX_VALUE, "createdAt", "desc",
+        var result = issueService.list(0, Integer.MAX_VALUE, "createdAt", "desc", null,
                 statuses, submitterIds, submitterDepartments, occasionId, issueType,
                 responsibleTeam, responsiblePersonId, dateFrom, dateTo,
                 u.getId(), isAdmin(u), isIssueAdmin(u), isItEmployee, false, teamMemberIds);

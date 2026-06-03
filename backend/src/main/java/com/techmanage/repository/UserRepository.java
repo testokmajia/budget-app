@@ -26,4 +26,6 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @Modifying
     @Query("UPDATE User u SET u.department = :newName WHERE u.department = :oldName")
     int updateDepartment(String oldName, String newName);
+
+    List<User> findByEnabledTrue();
 }

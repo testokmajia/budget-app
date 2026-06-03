@@ -22,6 +22,7 @@ const sortDir = ref('desc')
 
 // === Filter state ===
 const filters = reactive({
+  keyword: '',
   statuses: [],
   submitterIds: [],
   submitterDepartments: [],
@@ -410,6 +411,7 @@ async function fetchData() {
       sortBy: sortBy.value,
       sortDir: sortDir.value,
     }
+    if (filters.keyword) params.keyword = filters.keyword
     if (filters.statuses.length) params.statuses = filters.statuses.join(',')
     if (filters.submitterIds.length) params.submitterIds = filters.submitterIds.join(',')
     if (filters.submitterDepartments.length) params.submitterDepartments = filters.submitterDepartments.join(',')
@@ -895,6 +897,8 @@ onUnmounted(() => {
 
     <!-- Filter bar -->
     <div class="search-bar">
+      <el-input v-model="filters.keyword" placeholder="搜索标题、内容、编号…" clearable style="width: 240px"
+        :prefix-icon="Search" @keyup.enter="handleFilter" @clear="handleFilter" />
       <el-select v-model="filters.statuses" placeholder="问题状态" clearable multiple collapse-tags style="width: 180px" @change="handleFilter">
         <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
       </el-select>

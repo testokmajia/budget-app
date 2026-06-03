@@ -7,7 +7,6 @@ import { changePassword } from '@/api/auth'
 import { ElMessage } from 'element-plus'
 import {
   HomeFilled,
-  Clock,
   List,
   Trophy,
   Warning,
@@ -16,6 +15,7 @@ import {
   Menu,
   Lock,
   Document,
+  Tickets,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -29,12 +29,15 @@ const pageTitle = computed(() => {
     '/dashboard': '首页',
     '/checklist': '清单革命',
     '/reward': '奖惩记录',
-    '/issue': '科技问题管理',
+    '/issue': '问题清单',
     '/weekly/fill': '工作周报',
     '/weekly/team': '工作周报',
     '/weekly/history': '工作周报',
     '/weekly/dept': '工作周报',
-    '/pending': '系统问题实施',
+    '/requirement/list': '需求提出',
+    '/requirement/kanban': '需求看板',
+    '/requirement/test-report': '测试报告',
+    '/pending': '问题实施',
     '/admin': '系统管理',
   }
   return map[route.path] || ''
@@ -124,10 +127,20 @@ const weeklySubItems = [
   { path: '/weekly/history', title: '历史记录' },
 ]
 
+const requirementSubItems = [
+  { path: '/requirement/list', title: '需求提出' },
+  { path: '/requirement/kanban', title: '需求看板' },
+  { path: '/requirement/test-report', title: '测试报告' },
+]
+
 const otherMenuItems = [
   { path: '/checklist', title: '清单革命', icon: List },
   { path: '/reward', title: '奖惩记录', icon: Trophy },
-  { path: '/issue', title: '科技问题管理', icon: Warning },
+]
+
+const issueSubItems = [
+  { path: '/issue', title: '问题清单' },
+  { path: '/pending', title: '问题实施', roles: ['ROLE_IT'] },
 ]
 
 const adminMenu = [
@@ -228,14 +241,34 @@ function handleLogout() {
           </el-menu-item>
         </el-sub-menu>
 
+        <el-sub-menu index="requirement-sub">
+          <template #title>
+            <el-icon><Tickets /></el-icon>
+            <span>需求管理</span>
+          </template>
+          <el-menu-item
+            v-for="sub in requirementSubItems"
+            :key="sub.path"
+            :index="sub.path"
+          >
+            {{ sub.title }}
+          </el-menu-item>
+        </el-sub-menu>
+
         <el-menu-item v-for="item in otherMenuItems" :key="item.path" :index="item.path">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.title }}</span>
         </el-menu-item>
-        <el-menu-item v-if="showPending" index="/pending">
-          <el-icon><Clock /></el-icon>
-          <span>系统问题实施</span>
-        </el-menu-item>
+
+        <el-sub-menu index="issue-sub">
+          <template #title>
+            <el-icon><Warning /></el-icon>
+            <span>问题管理</span>
+          </template>
+          <el-menu-item index="/issue">问题清单</el-menu-item>
+          <el-menu-item v-if="showPending" index="/pending">问题实施</el-menu-item>
+        </el-sub-menu>
+
         <el-menu-item
           v-for="item in adminMenu"
           :key="item.path"
@@ -284,14 +317,35 @@ function handleLogout() {
           </el-menu-item>
         </el-sub-menu>
 
+        <el-sub-menu index="requirement-sub-mobile">
+          <template #title>
+            <el-icon><Tickets /></el-icon>
+            <span>需求管理</span>
+          </template>
+          <el-menu-item
+            v-for="sub in requirementSubItems"
+            :key="sub.path"
+            :index="sub.path"
+            @click="navigate(sub.path)"
+          >
+            {{ sub.title }}
+          </el-menu-item>
+        </el-sub-menu>
+
         <el-menu-item v-for="item in otherMenuItems" :key="item.path" :index="item.path" @click="navigate(item.path)">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.title }}</span>
         </el-menu-item>
-        <el-menu-item v-if="showPending" index="/pending" @click="navigate('/pending')">
-          <el-icon><Clock /></el-icon>
-          <span>系统问题实施</span>
-        </el-menu-item>
+
+        <el-sub-menu index="issue-sub-mobile">
+          <template #title>
+            <el-icon><Warning /></el-icon>
+            <span>问题管理</span>
+          </template>
+          <el-menu-item index="/issue" @click="navigate('/issue')">问题清单</el-menu-item>
+          <el-menu-item v-if="showPending" index="/pending" @click="navigate('/pending')">问题实施</el-menu-item>
+        </el-sub-menu>
+
         <el-menu-item
           v-for="item in adminMenu"
           :key="item.path"

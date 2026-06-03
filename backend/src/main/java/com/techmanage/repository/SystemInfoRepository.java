@@ -13,4 +13,5 @@ public interface SystemInfoRepository extends JpaRepository<SystemInfo, Long>, J
     boolean existsByCode(String code);
     Optional<SystemInfo> findByName(String name);
     Optional<SystemInfo> findByCode(String code);
+    List<SystemInfo> findByEnabledTrue();
 }

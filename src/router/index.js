@@ -41,13 +41,13 @@ const routes = [
         path: 'issue',
         name: 'Issue',
         component: () => import('@/views/issue/IssueView.vue'),
-        meta: { title: '科技问题管理' },
+        meta: { title: '问题清单' },
       },
       {
         path: 'pending',
         name: 'Pending',
         component: () => import('@/views/pending/PendingView.vue'),
-        meta: { title: '系统问题实施' },
+        meta: { title: '问题实施' },
       },
       {
         path: 'weekly',
@@ -80,6 +80,24 @@ const routes = [
             meta: { title: '历史记录' },
           },
         ],
+      },
+      {
+        path: 'requirement/list',
+        name: 'RequirementList',
+        component: () => import('@/views/requirement/RequirementList.vue'),
+        meta: { title: '需求提出' },
+      },
+      {
+        path: 'requirement/kanban',
+        name: 'RequirementKanban',
+        component: () => import('@/views/requirement/RequirementKanban.vue'),
+        meta: { title: '需求看板' },
+      },
+      {
+        path: 'requirement/test-report',
+        name: 'TestReportList',
+        component: () => import('@/views/testReport/TestReportList.vue'),
+        meta: { title: '测试报告' },
       },
       {
         path: 'admin',

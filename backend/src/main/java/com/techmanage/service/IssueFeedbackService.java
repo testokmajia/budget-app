@@ -8,7 +8,7 @@ import java.util.Map;
 
 public interface IssueFeedbackService {
     PageResponse<IssueResponse> list(int page, int size, String sortBy, String sortDir,
-        List<String> statuses, List<Long> submitterIds, List<String> submitterDepartments,
+        String keyword, List<String> statuses, List<Long> submitterIds, List<String> submitterDepartments,
         Long occasionId, String issueType, String responsibleTeam,
         Long responsiblePersonId, LocalDate dateFrom, LocalDate dateTo,
         Long currentUserId, boolean isAdmin, boolean isIssueAdmin,

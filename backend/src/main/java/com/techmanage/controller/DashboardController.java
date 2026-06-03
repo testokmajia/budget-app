@@ -7,6 +7,7 @@ import com.techmanage.entity.RewardPunishment;
 import com.techmanage.entity.Team;
 import com.techmanage.entity.User;
 import com.techmanage.repository.IssueFeedbackRepository;
+import com.techmanage.repository.RequirementRepository;
 import com.techmanage.repository.RewardPunishmentRepository;
 import com.techmanage.repository.TeamRepository;
 import com.techmanage.repository.UserRepository;
@@ -37,17 +38,20 @@ public class DashboardController {
     private final UserRepository userRepository;
     private final RewardPunishmentRepository rewardRepository;
     private final WeeklyReportRepository weeklyReportRepository;
+    private final RequirementRepository requirementRepository;
 
     public DashboardController(IssueFeedbackRepository issueRepository,
                                TeamRepository teamRepository,
                                UserRepository userRepository,
                                RewardPunishmentRepository rewardRepository,
-                               WeeklyReportRepository weeklyReportRepository) {
+                               WeeklyReportRepository weeklyReportRepository,
+                               RequirementRepository requirementRepository) {
         this.issueRepository = issueRepository;
         this.teamRepository = teamRepository;
         this.userRepository = userRepository;
         this.rewardRepository = rewardRepository;
         this.weeklyReportRepository = weeklyReportRepository;
+        this.requirementRepository = requirementRepository;
     }
 
     @GetMapping("/stats")
@@ -252,13 +256,27 @@ public class DashboardController {
                 punishmentPersonDept.getOrDefault(e.getKey(), ""), e.getValue().intValue()))
             .toList();
 
+        // Requirement stats
+        long reqTotal = requirementRepository.count();
+        long reqInApproval = requirementRepository.countByStatus("审批中");
+        long reqConfirmed = requirementRepository.countByStatus("需求已确认");
+        long reqInProgress = requirementRepository.countByStatus("实施中");
+        long reqTestPassed = requirementRepository.countByStatus("测试通过");
+        long reqProduction = requirementRepository.countByStatus("已投产");
+        long reqClosed = requirementRepository.countByStatus("已关闭");
+        long reqRejected = requirementRepository.countByStatus("已驳回");
+        var requirementStats = new DashboardStats.RequirementStats(
+            reqTotal, reqInApproval, reqConfirmed, reqInProgress,
+            reqTestPassed, reqProduction, reqClosed, reqRejected);
+
         return ApiResponse.ok(new DashboardStats(
             statusCounts, teamDistribution,
             new DashboardStats.OverdueInfo(tempOverdue, permOverdue),
             personnel,
             pendingTasks,
             rewardRanking,
-            punishmentRanking
+            punishmentRanking,
+            requirementStats
         ));
     }
 }
