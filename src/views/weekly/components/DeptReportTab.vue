@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { nameEquals } from '@/utils/compare'
 import {
   mergeReports, getDeptReports, getDeptReport, updateDeptReport,
   submitDeptReport, finalizeDeptReport, exportWord, exportHtml,
@@ -243,7 +244,7 @@ const deptTeams = computed(() => {
 })
 
 function teamSummaryForTeam(teamName) {
-  return teamSummaries.value.find(s => s.teamName === teamName)
+  return teamSummaries.value.find(s => nameEquals(s.teamName, teamName))
 }
 
 // 处理团队点击：优先使用已加载的汇总，兜底按ID获取
@@ -354,7 +355,7 @@ const tsSections = computed(() => {
           <div
             v-for="t in deptTeams" :key="t.teamName"
             class="sidebar-member"
-            :class="{ active: selectedType === 'team' && selectedTeamSummary?.teamName === t.teamName }"
+            :class="{ active: selectedType === 'team' && nameEquals(selectedTeamSummary?.teamName, t.teamName) }"
             style="align-items:flex-start;padding:8px;"
             :style="{ cursor: t.hasSummary ? 'pointer' : 'default' }"
             @click="handleTeamClick(t)"

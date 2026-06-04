@@ -48,7 +48,7 @@ public class RequirementComment {
     public Long getRequirementId() { return requirementId; }
     public void setRequirementId(Long requirementId) { this.requirementId = requirementId; }
     public String getAuthor() { return author; }
-    public void setAuthor(String author) { this.author = author; }
+    public void setAuthor(String author) { this.author = author != null ? author.trim() : null; }
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
     public String getAction() { return action; }

@@ -14,6 +14,8 @@ export function uploadTestDocFile(file) {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }
+export function deptReview(id, data) { return request.post(`/test-reports/${id}/dept-review`, data) }
+export function getComments(id) { return request.get(`/test-reports/${id}/comments`) }
 export function getDefaultReviewers(requirementIds) {
   return request.post('/test-reports/default-reviewers', { requirementIds })
 }

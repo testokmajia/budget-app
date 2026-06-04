@@ -50,15 +50,15 @@ public class User extends BaseEntity implements UserDetails {
 
     // getters/setters for custom fields
     public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
+    public void setUsername(String username) { this.username = username != null ? username.trim() : null; }
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
     public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setName(String name) { this.name = name != null ? name.trim() : null; }
     public String getDepartment() { return department; }
-    public void setDepartment(String department) { this.department = department; }
+    public void setDepartment(String department) { this.department = department != null ? department.trim() : null; }
     public String getPosition() { return position; }
-    public void setPosition(String position) { this.position = position; }
+    public void setPosition(String position) { this.position = position != null ? position.trim() : null; }
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
     public String getEmail() { return email; }

@@ -20,6 +20,9 @@ public class TestReportRequest {
     /** 测试报告附件路径 */
     private String testReportPath;
 
+    /** 测试报告原始文件名 */
+    private String testReportName;
+
     /** 确认意见 */
     private String comment;
 
@@ -46,6 +49,8 @@ public class TestReportRequest {
     public void setReviewPersons(String reviewPersons) { this.reviewPersons = reviewPersons; }
     public String getTestReportPath() { return testReportPath; }
     public void setTestReportPath(String testReportPath) { this.testReportPath = testReportPath; }
+    public String getTestReportName() { return testReportName; }
+    public void setTestReportName(String testReportName) { this.testReportName = testReportName; }
     public String getComment() { return comment; }
     public void setComment(String comment) { this.comment = comment; }
     public String getConfirmedDate() { return confirmedDate; }

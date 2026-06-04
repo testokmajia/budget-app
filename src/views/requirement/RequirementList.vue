@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus, Search, Edit } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
@@ -9,6 +9,7 @@ import RequirementForm from './components/RequirementForm.vue'
 import RequirementDetail from './components/RequirementDetail.vue'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const loading = ref(false)
 const tableData = ref([])
@@ -30,6 +31,7 @@ const filters = reactive({
   sysOwner: '',
   dateFrom: '',
   dateTo: '',
+  currentNode: '',
 })
 const showAdvFilter = ref(false)
 
@@ -75,6 +77,7 @@ async function loadData() {
       sysOwner: filters.sysOwner || undefined,
       dateFrom: filters.dateFrom || undefined,
       dateTo: filters.dateTo || undefined,
+      currentNode: filters.currentNode || undefined,
     }
     const res = await getList(params)
     tableData.value = res.data?.content || []
@@ -112,13 +115,17 @@ function filterByStatus(status) {
   handleSearch()
 }
 
-// 清除高级筛选
+// 清除全部筛选（含URL参数带入的status和currentNode）
 function clearAdvFilter() {
+  filters.keyword = ''
+  filters.status = ''
+  filters.priority = ''
   filters.dept = ''
   filters.submitterId = null
   filters.sysOwner = ''
   filters.dateFrom = ''
   filters.dateTo = ''
+  filters.currentNode = ''
   handleSearch()
 }
 
@@ -157,6 +164,9 @@ function handleSizeChange(size) {
 }
 
 onMounted(() => {
+  // 支持从URL参数初始化筛选（来自首页待办跳转）
+  if (route.query.status) filters.status = route.query.status
+  if (route.query.currentNode) filters.currentNode = route.query.currentNode
   loadData()
   loadStats()
   loadFilterOptions()

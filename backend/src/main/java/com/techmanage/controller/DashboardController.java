@@ -10,6 +10,7 @@ import com.techmanage.repository.IssueFeedbackRepository;
 import com.techmanage.repository.RequirementRepository;
 import com.techmanage.repository.RewardPunishmentRepository;
 import com.techmanage.repository.TeamRepository;
+import com.techmanage.repository.TestReportRepository;
 import com.techmanage.repository.UserRepository;
 import com.techmanage.repository.WeeklyReportRepository;
 import org.springframework.security.core.Authentication;
@@ -39,19 +40,22 @@ public class DashboardController {
     private final RewardPunishmentRepository rewardRepository;
     private final WeeklyReportRepository weeklyReportRepository;
     private final RequirementRepository requirementRepository;
+    private final TestReportRepository testReportRepository;
 
     public DashboardController(IssueFeedbackRepository issueRepository,
                                TeamRepository teamRepository,
                                UserRepository userRepository,
                                RewardPunishmentRepository rewardRepository,
                                WeeklyReportRepository weeklyReportRepository,
-                               RequirementRepository requirementRepository) {
+                               RequirementRepository requirementRepository,
+                               TestReportRepository testReportRepository) {
         this.issueRepository = issueRepository;
         this.teamRepository = teamRepository;
         this.userRepository = userRepository;
         this.rewardRepository = rewardRepository;
         this.weeklyReportRepository = weeklyReportRepository;
         this.requirementRepository = requirementRepository;
+        this.testReportRepository = testReportRepository;
     }
 
     @GetMapping("/stats")
@@ -132,7 +136,7 @@ public class DashboardController {
         // IT employee pending tasks
         User currentUser = userRepository.findById(userId).orElse(null);
         String userName = currentUser != null ? currentUser.getName() : "";
-        boolean isItEmployee = currentUser != null && "信息科技部".equals(currentUser.getDepartment());
+        boolean isItEmployee = currentUser != null && "信息科技部".equals(trim(currentUser.getDepartment()));
 
         if (isItEmployee) {
             // Tasks assigned to me
@@ -269,6 +273,139 @@ public class DashboardController {
             reqTotal, reqInApproval, reqConfirmed, reqInProgress,
             reqTestPassed, reqProduction, reqClosed, reqRejected);
 
+        // 需求审批待办
+        if (userName != null && !userName.isBlank()) {
+            List<com.techmanage.entity.Requirement> reqs = requirementRepository.findAll();
+            String userDept = currentUser != null ? currentUser.getDepartment() : "";
+
+            // 架构管理岗：有待评估需求
+            boolean isArchitect = auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ARCHITECT"));
+            if (isArchitect) {
+                long architectPending = reqs.stream()
+                    .filter(r -> "审批中".equals(r.getStatus())
+                        && "架构管理岗".equals(r.getCurrentNode()))
+                    .count();
+                if (architectPending > 0) {
+                    pendingTasks.add(new DashboardStats.PendingTask(
+                        "需求待评估", "有待评估涉及系统的需求", architectPending,
+                        "RequirementList", "status=审批中&currentNode=架构管理岗"
+                    ));
+                }
+            }
+
+            // 部门负责人：有待审批需求（当前节点=部门负责人，且需求部门与用户所在部门匹配）
+            if (userDept != null && !userDept.isBlank()) {
+                long deptLeaderPending = reqs.stream()
+                    .filter(r -> "审批中".equals(r.getStatus())
+                        && "部门负责人".equals(r.getCurrentNode())
+                        && userDept.equals(trim(r.getDept())))
+                    .count();
+                if (deptLeaderPending > 0) {
+                    pendingTasks.add(new DashboardStats.PendingTask(
+                        "需求待部门审批", "作为部门负责人，有待审批的需求", deptLeaderPending,
+                        "RequirementList", "status=审批中&currentNode=部门负责人"
+                    ));
+                }
+            }
+
+            // 团队组长：有待指派PM/PD的需求
+            List<Team> ledTeams = teamRepository.findByLeader(userName);
+            if (!ledTeams.isEmpty()) {
+                Set<String> teamNames = ledTeams.stream().map(Team::getName).collect(Collectors.toSet());
+                long teamLeadPending = reqs.stream()
+                    .filter(r -> "审批中".equals(r.getStatus())
+                        && "团队组长".equals(r.getCurrentNode()))
+                    .filter(r -> {
+                        // 检查需求的涉及系统是否在当前用户负责的团队中
+                        try {
+                            if (r.getSystemItems() != null) {
+                                com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+                                var items = om.readValue(r.getSystemItems(), new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+                                return items.stream().anyMatch(item -> teamNames.contains(trim((String) item.get("team"))));
+                            }
+                        } catch (Exception e) { /* ignore */ }
+                        return false;
+                    })
+                    .count();
+                if (teamLeadPending > 0) {
+                    pendingTasks.add(new DashboardStats.PendingTask(
+                        "需求待指派", "有待指派项目经理和产品经理", teamLeadPending,
+                        "RequirementList", "status=审批中&currentNode=团队组长"
+                    ));
+                }
+            }
+
+            // 产品经理：有待处理需求（当前节点=产品经理，且当前用户在assignedPd中）
+            long pdPending = reqs.stream()
+                .filter(r -> "审批中".equals(r.getStatus())
+                    && "产品经理".equals(r.getCurrentNode())
+                    && r.getAssignedPd() != null && containsName(r.getAssignedPd(), userName))
+                .count();
+            if (pdPending > 0) {
+                pendingTasks.add(new DashboardStats.PendingTask(
+                    "需求待提交评审", "您被指定为产品经理，待上传需求说明书", pdPending,
+                    "RequirementList", "status=审批中&currentNode=产品经理"
+                ));
+            }
+
+            // 多方确认：当前用户在确认列表中且未确认
+            long confirmPending = reqs.stream()
+                .filter(r -> "审批中".equals(r.getStatus())
+                    && "多方确认".equals(r.getCurrentNode())
+                    && r.getSpecReviewers() != null)
+                .filter(r -> {
+                    try {
+                        com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+                        var reviewers = om.readValue(r.getSpecReviewers(),
+                            new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+                        return reviewers.stream().anyMatch(rv ->
+                            trim(userName).equals(trim((String) rv.get("name"))) && !Boolean.TRUE.equals(rv.get("confirmed")));
+                    } catch (Exception e) { return false; }
+                })
+                .count();
+            if (confirmPending > 0) {
+                pendingTasks.add(new DashboardStats.PendingTask(
+                    "需求说明书待确认", "您需要确认需求说明书", confirmPending,
+                    "RequirementList", "status=审批中&currentNode=多方确认"
+                ));
+            }
+
+            // 项目经理：有待启动实施的需求
+            long pmImplPending = reqs.stream()
+                .filter(r -> "需求已确认".equals(r.getStatus())
+                    && r.getAssignedPm() != null && containsName(r.getAssignedPm(), userName))
+                .count();
+            if (pmImplPending > 0) {
+                pendingTasks.add(new DashboardStats.PendingTask(
+                    "需求待启动实施", "您是项目经理，待启动实施", pmImplPending,
+                    "RequirementList", "status=需求已确认"
+                ));
+            }
+
+            // ========== 测试报告待办 ==========
+            List<com.techmanage.entity.TestReport> reports = testReportRepository.findAll();
+            com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+
+            // 测试报告部门审核待办（待部门审核状态，当前用户在部门审核人列表中）
+            long trDeptPending = reports.stream()
+                .filter(r -> "待部门审核".equals(r.getStatus()) && r.getDeptReviewers() != null)
+                .filter(r -> {
+                    try {
+                        var deptReviewers = om.readValue(r.getDeptReviewers(),
+                            new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+                        return deptReviewers.stream().anyMatch(name -> trim(name).equals(trim(userName)));
+                    } catch (Exception e) { return false; }
+                })
+                .count();
+            if (trDeptPending > 0) {
+                pendingTasks.add(new DashboardStats.PendingTask(
+                    "测试报告待部门审核", "您有测试报告需要部门审核", trDeptPending,
+                    "TestReportList", "status=待部门审核"
+                ));
+            }
+        }
+
         return ApiResponse.ok(new DashboardStats(
             statusCounts, teamDistribution,
             new DashboardStats.OverdueInfo(tempOverdue, permOverdue),
@@ -278,5 +415,19 @@ public class DashboardController {
             punishmentRanking,
             requirementStats
         ));
+    }
+
+    /** 安全的 trim，null 安全 */
+    private static String trim(String s) {
+        return s == null ? null : s.trim();
+    }
+
+    /** 逗号/顿号分隔的名称列表中是否包含指定名称（trim 后比较） */
+    private static boolean containsName(String nameList, String targetName) {
+        if (nameList == null || targetName == null) return false;
+        String target = targetName.trim();
+        return java.util.Arrays.stream(nameList.split("[、,，]"))
+                .map(String::trim)
+                .anyMatch(n -> n.equals(target));
     }
 }

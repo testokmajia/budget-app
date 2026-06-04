@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techmanage.dto.RequirementRequest;
 import com.techmanage.dto.RequirementResponse;
 import com.techmanage.entity.*;
+import com.techmanage.repository.DepartmentRepository;
 import com.techmanage.repository.RequirementCommentRepository;
 import com.techmanage.repository.RequirementRepository;
 import com.techmanage.repository.SystemInfoRepository;
@@ -39,11 +40,11 @@ public class RequirementService {
     /**
      * 审批节点定义（0-based）
      * 0=提出人, 1=部门负责人, 2=架构管理岗, 3=团队组长,
-     * 4=产品经理, 5=多方确认
+     * 4=产品经理, 5=多方确认, 6=项目经理
      */
     private static final String[] NODES = {
         "提出人", "部门负责人", "架构管理岗", "团队组长",
-        "产品经理", "多方确认"
+        "产品经理", "多方确认", "项目经理"
     };
 
     private final RequirementRepository requirementRepository;
@@ -51,23 +52,26 @@ public class RequirementService {
     private final UserRepository userRepository;
     private final SystemInfoRepository systemInfoRepository;
     private final TeamRepository teamRepository;
+    private final DepartmentRepository departmentRepository;
 
     public RequirementService(RequirementRepository requirementRepository,
                               RequirementCommentRepository commentRepository,
                               UserRepository userRepository,
                               SystemInfoRepository systemInfoRepository,
-                              TeamRepository teamRepository) {
+                              TeamRepository teamRepository,
+                              DepartmentRepository departmentRepository) {
         this.requirementRepository = requirementRepository;
         this.commentRepository = commentRepository;
         this.userRepository = userRepository;
         this.systemInfoRepository = systemInfoRepository;
         this.teamRepository = teamRepository;
+        this.departmentRepository = departmentRepository;
     }
 
     /**
      * 数据迁移：修正旧数据的 nodeIndex（项目启动时自动执行）
-     * 旧流程（7节点）：提出人(0)→部门负责人(1)→架构管理岗(2)→团队组长(3)→项目经理(4)→产品经理(5)→多方确认(6)
-     * 新流程（6节点）：提出人(0)→部门负责人(1)→架构管理岗(2)→团队组长(3)→产品经理(4)→多方确认(5)
+     * 旧流程（6节点）：提出人(0)→架构管理岗(1)→团队组长(2)→产品经理(3)→多方确认(4)→项目经理(5)
+     * 新流程（7节点）：提出人(0)→部门负责人(1)→架构管理岗(2)→团队组长(3)→产品经理(4)→多方确认(5)→项目经理(6)
      */
     @PostConstruct
     @Transactional
@@ -77,30 +81,20 @@ public class RequirementService {
             int migrated = 0;
             for (Requirement r : all) {
                 boolean changed = false;
-                // 旧 nodeIndex=4（项目经理）：PD已指派→改为4（产品经理）；PD未指派→退回3（团队组长）
-                if (r.getNodeIndex() != null && r.getNodeIndex() == 4
-                        && "项目经理".equals(r.getCurrentNode())) {
-                    if (StringUtils.hasText(getPrimarySystemPd(r))) {
-                        r.setNodeIndex(4);
-                        r.setCurrentNode(NODES[4]); // 产品经理
-                    } else {
-                        r.setNodeIndex(3);
-                        r.setCurrentNode(NODES[3]); // 团队组长
+                // 已经是新格式的记录（当前节点索引匹配 NODES 数组），无需迁移
+                if (r.getNodeIndex() != null && r.getNodeIndex() < NODES.length
+                        && NODES[r.getNodeIndex()].equals(r.getCurrentNode())) {
+                    continue;
+                }
+                // 旧 nodeIndex>=1 的需求整体 +1（给部门负责人节点腾位置）
+                if (r.getNodeIndex() != null && r.getNodeIndex() >= 1
+                        && !"部门负责人".equals(r.getCurrentNode())) {
+                    int newIndex = r.getNodeIndex() + 1;
+                    if (newIndex >= NODES.length) {
+                        newIndex = NODES.length - 1;
                     }
-                    changed = true;
-                }
-                // 旧 nodeIndex=5（产品经理）→ 4
-                else if (r.getNodeIndex() != null && r.getNodeIndex() == 5
-                        && "产品经理".equals(r.getCurrentNode())) {
-                    r.setNodeIndex(4);
-                    r.setCurrentNode(NODES[4]);
-                    changed = true;
-                }
-                // 旧 nodeIndex=6（多方确认）→ 5
-                if (r.getNodeIndex() != null && r.getNodeIndex() == 6
-                        && "多方确认".equals(r.getCurrentNode())) {
-                    r.setNodeIndex(5);
-                    r.setCurrentNode(NODES[5]);
+                    r.setNodeIndex(newIndex);
+                    r.setCurrentNode(NODES[newIndex]);
                     changed = true;
                 }
                 if (changed) {
@@ -109,7 +103,7 @@ public class RequirementService {
                 }
             }
             if (migrated > 0) {
-                log.info("数据迁移完成：已修正 {} 条需求的节点索引", migrated);
+                log.info("数据迁移完成：已修正 {} 条需求的节点索引（6节点→7节点）", migrated);
             }
         } catch (Exception e) {
             log.warn("数据迁移失败（可忽略，通常因为表尚未创建）: {}", e.getMessage());
@@ -121,6 +115,7 @@ public class RequirementService {
     public Page<RequirementResponse> list(String keyword, String status, String priority,
                                           String dept, Long submitterId, String sysOwner,
                                           LocalDate dateFrom, LocalDate dateTo,
+                                          String currentNode,
                                           int page, int size, String sortBy, String sortDir) {
         Sort sort = Sort.by("desc".equalsIgnoreCase(sortDir) ? Sort.Direction.DESC : Sort.Direction.ASC,
                 sortBy != null ? sortBy : "createdAt");
@@ -142,6 +137,7 @@ public class RequirementService {
             if (StringUtils.hasText(sysOwner)) predicates.add(cb.like(root.get("systemItems"), "%" + sysOwner + "%"));
             if (dateFrom != null) predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), dateFrom.atStartOfDay()));
             if (dateTo != null) predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), dateTo.atTime(23, 59, 59)));
+            if (StringUtils.hasText(currentNode)) predicates.add(cb.equal(root.get("currentNode"), currentNode));
             return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
         };
 
@@ -176,7 +172,7 @@ public class RequirementService {
     // ==================== 核心操作 ====================
 
     /**
-     * 创建需求 → 流转至部门负责人，支持上传需求说明书
+     * 创建需求 → 流转至架构管理岗，支持上传需求说明书
      */
     @Transactional
     public RequirementResponse create(User submitter, RequirementRequest request) {
@@ -197,6 +193,9 @@ public class RequirementService {
         // 支持新建时上传需求说明书
         if (StringUtils.hasText(request.getSpecDocumentPath())) {
             req.setSpecDocumentPath(request.getSpecDocumentPath());
+        }
+        if (StringUtils.hasText(request.getSpecDocumentName())) {
+            req.setSpecDocumentName(request.getSpecDocumentName());
         }
         requirementRepository.save(req);
         addComment(req.getId(), submitter.getName(), "提出人", "提交", "提交需求申请。");
@@ -234,12 +233,50 @@ public class RequirementService {
     }
 
     /**
+     * 部门负责人审批：通过则流转至架构管理岗，驳回则退回提出人
+     */
+    @Transactional
+    public RequirementResponse deptLeaderApprove(Long id, User operator, String comment) {
+        Requirement req = requirementRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("需求不存在"));
+        if (!"部门负责人".equals(req.getCurrentNode())) {
+            throw new RuntimeException("当前节点不是部门负责人");
+        }
+
+        // 权限校验：必须是需求提出人所在部门的负责人
+        String deptName = req.getDept();
+        if (!StringUtils.hasText(deptName)) {
+            throw new RuntimeException("需求未关联部门，无法进行部门负责人审批");
+        }
+        Department dept = departmentRepository.findByName(deptName)
+                .orElseThrow(() -> new RuntimeException("未找到部门：" + deptName));
+        if (!trim(operator.getName()).equals(trim(dept.getLeader()))
+                && !hasRole(operator, "ROLE_ADMIN")) {
+            throw new RuntimeException("只有" + deptName + "的部门负责人才能审批");
+        }
+
+        String text = StringUtils.hasText(comment) ? comment : "审批通过。";
+        addComment(id, operator.getName(), "部门负责人", "通过", text);
+
+        // 流转至架构管理岗
+        req.setCurrentNode(NODES[2]); // 架构管理岗
+        req.setNodeIndex(2);
+        requirementRepository.save(req);
+        log.info("需求 {} 部门负责人审批通过，流转至架构管理岗", req.getRequirementCode());
+        return getDetail(id);
+    }
+
+    /**
      * 驳回至主责系统的产品经理
      */
     @Transactional
     public RequirementResponse reject(Long id, User operator, String comment) {
         Requirement req = requirementRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("需求不存在"));
+
+        // 权限校验：只有当前节点的操作人才能驳回
+        checkCanActAtNode(req, operator);
+
         String text = StringUtils.hasText(comment) ? comment : "驳回。";
         addComment(id, operator.getName(), req.getCurrentNode(), "驳回", text);
 
@@ -268,7 +305,7 @@ public class RequirementService {
                     req.getSystemItems(), new TypeReference<List<RequirementResponse.SystemItem>>() {});
             String primary = req.getPrimarySystemName();
             for (RequirementResponse.SystemItem item : items) {
-                if (item.name().equals(primary) && StringUtils.hasText(item.pd())) {
+                if (trim(item.name()).equals(trim(primary)) && StringUtils.hasText(item.pd())) {
                     return item.pd();
                 }
             }
@@ -285,18 +322,30 @@ public class RequirementService {
      */
     @Transactional
     public RequirementResponse evaluate(Long id, User operator, String systemItemsJson,
-                                         String primarySystemName, String comment) {
+                                         String primarySystemName, String comment,
+                                         String reviewReportPath, String reviewReportName) {
         Requirement req = requirementRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("需求不存在"));
         if (!"架构管理岗".equals(req.getCurrentNode())) {
             throw new RuntimeException("当前节点不是架构管理岗");
         }
+        // 权限校验：只有架构管理岗角色或管理员才能评估
+        if (!hasRole(operator, "ROLE_ARCHITECT") && !hasRole(operator, "ROLE_ADMIN")) {
+            throw new RuntimeException("只有架构管理岗才能提交评估");
+        }
         req.setSystemItems(systemItemsJson);
         req.setPrimarySystemName(primarySystemName);
+        // 架构管理岗上传架构评审报告（保存到独立字段，不覆盖需求说明书）
+        if (StringUtils.hasText(reviewReportPath)) {
+            req.setReviewReportPath(reviewReportPath);
+        }
+        if (StringUtils.hasText(reviewReportName)) {
+            req.setReviewReportName(reviewReportName);
+        }
         String text = StringUtils.hasText(comment) ? comment : "系统评估完成，主责系统：" + primarySystemName;
         addComment(id, operator.getName(), "架构管理岗", "评估", text);
         // 流转至团队组长
-        req.setCurrentNode(NODES[3]);
+        req.setCurrentNode(NODES[3]); // 团队组长
         req.setNodeIndex(3);
         requirementRepository.save(req);
         return getDetail(id);
@@ -315,9 +364,26 @@ public class RequirementService {
             throw new RuntimeException("当前节点不是团队组长");
         }
 
-        // 获取当前用户所属团队
-        String userTeam = TeamUtils.findTeamNameForUser(
-                teamRepository.findAllByOrderByIdAsc(), operator.getName());
+        // 权限校验：只有涉及系统所属团队的组长才能指派
+        // 用户可能属于多个团队，检查所有团队
+        java.util.List<Team> allTeams = teamRepository.findAllByOrderByIdAsc();
+        java.util.List<String> userTeams = TeamUtils.findTeamNamesForUser(allTeams, operator.getName());
+        if (userTeams.isEmpty()) {
+            throw new RuntimeException("您不是任何团队的组长，无法指派");
+        }
+        // 验证用户的任一团队是否在需求的涉及系统中
+        boolean teamMatches = false;
+        if (StringUtils.hasText(req.getSystemItems())) {
+            try {
+                List<RequirementResponse.SystemItem> items = MAPPER.readValue(
+                        req.getSystemItems(), new TypeReference<List<RequirementResponse.SystemItem>>() {});
+                teamMatches = items.stream().anyMatch(item ->
+                    userTeams.stream().anyMatch(ut -> trim(item.team()).equals(trim(ut))));
+            } catch (JsonProcessingException e) { /* ignore */ }
+        }
+        if (!teamMatches) {
+            throw new RuntimeException("您的团队不在该需求的涉及系统中，无法指派");
+        }
 
         // 合并PM/PD到系统列表
         if (StringUtils.hasText(systemItemsJson)) {
@@ -334,7 +400,7 @@ public class RequirementService {
                 // 合并：更新匹配的系统（按名称匹配）
                 for (RequirementResponse.SystemItem inc : incoming) {
                     for (int j = 0; j < existing.size(); j++) {
-                        if (existing.get(j).name().equals(inc.name())) {
+                        if (trim(existing.get(j).name()).equals(trim(inc.name()))) {
                             // PM为空时默认取系统负责人
                             String pm = StringUtils.hasText(inc.pm()) ? inc.pm() : existing.get(j).owner();
                             // PD保留传入值，为空则保留原有值
@@ -366,7 +432,7 @@ public class RequirementService {
             }
         }
 
-        String teamLabel = userTeam != null ? userTeam : "全部";
+        String teamLabel = !userTeams.isEmpty() ? String.join("、", userTeams) : "全部";
         String text = StringUtils.hasText(comment) ? comment
                 : "已指派" + teamLabel + "的项目经理和产品经理";
         addComment(id, operator.getName(), "团队组长", "指派", text);
@@ -402,18 +468,27 @@ public class RequirementService {
      */
     @Transactional
     public RequirementResponse uploadSpec(Long id, User operator, String specDocumentPath,
-                                           String specReviewersJson, String comment) {
+                                           String specReviewersJson, String comment,
+                                           String specDocumentName) {
         Requirement req = requirementRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("需求不存在"));
         if (!"产品经理".equals(req.getCurrentNode())) {
             throw new RuntimeException("当前节点不是产品经理");
         }
+        // 权限校验：只有主责系统的产品经理（assignedPd）才能上传
+        String currentPd = getPrimarySystemPd(req);
+        if (StringUtils.hasText(currentPd) && !containsName(currentPd, operator.getName())) {
+            throw new RuntimeException("只有主责产品经理才能上传/更新需求附件");
+        }
         req.setSpecDocumentPath(specDocumentPath);
+        if (StringUtils.hasText(specDocumentName)) {
+            req.setSpecDocumentName(specDocumentName);
+        }
         req.setSpecReviewers(specReviewersJson);
         String text = StringUtils.hasText(comment) ? comment : "需求说明书已上传，待多方确认。";
         addComment(id, operator.getName(), "产品经理", "上传", text);
         // 流转至多方确认
-        req.setCurrentNode(NODES[5]);
+        req.setCurrentNode(NODES[5]); // 多方确认
         req.setNodeIndex(5);
         requirementRepository.save(req);
         return getDetail(id);
@@ -436,7 +511,7 @@ public class RequirementService {
         boolean found = false;
 
         for (java.util.Map<String, Object> r : reviewers) {
-            if (operatorName.equals(r.get("name"))) {
+            if (trim(operatorName).equals(trim((String) r.get("name")))) {
                 r.put("confirmed", true);
                 r.put("confirmedAt", java.time.LocalDateTime.now().toString());
                 found = true;
@@ -457,7 +532,7 @@ public class RequirementService {
 
         String role = "";
         for (java.util.Map<String, Object> r : reviewers) {
-            if (operatorName.equals(r.get("name"))) {
+            if (trim(operatorName).equals(trim((String) r.get("name")))) {
                 role = String.valueOf(r.getOrDefault("role", ""));
                 break;
             }
@@ -470,8 +545,10 @@ public class RequirementService {
 
         if (allConfirmed) {
             req.setStatus("需求已确认");
+            req.setCurrentNode(NODES[6]); // 项目经理
+            req.setNodeIndex(6);
             addComment(id, "系统", "系统", "完成", "全部确认人员已确认，需求说明书确认完成。");
-            log.info("需求 {} 全部确认完成", req.getRequirementCode());
+            log.info("需求 {} 全部确认完成，流转至项目经理", req.getRequirementCode());
         } else {
             long confirmedCount = reviewers.stream().filter(r -> Boolean.TRUE.equals(r.get("confirmed"))).count();
             log.info("需求 {} 确认进度: {}/{}", req.getRequirementCode(), confirmedCount, reviewers.size());
@@ -551,11 +628,15 @@ public class RequirementService {
         if (!"已驳回".equals(req.getStatus())) {
             throw new RuntimeException("只有已驳回的需求可以重新提交");
         }
+        // 权限校验：只有需求提出人才能重新提交
+        if (!trim(operator.getName()).equals(trim(req.getSubmitterName()))) {
+            throw new RuntimeException("只有需求提出人才能重新提交");
+        }
         if (StringUtils.hasText(request.getTitle())) req.setTitle(request.getTitle());
         if (StringUtils.hasText(request.getContent())) req.setContent(request.getContent());
         if (StringUtils.hasText(request.getPriority())) req.setPriority(request.getPriority());
         req.setStatus("审批中");
-        req.setCurrentNode(NODES[1]);
+        req.setCurrentNode(NODES[1]); // 部门负责人
         req.setNodeIndex(1);
         addComment(id, operator.getName(), "提出人", "提交", "修改后重新提交。");
         requirementRepository.save(req);
@@ -574,6 +655,10 @@ public class RequirementService {
                 .orElseThrow(() -> new RuntimeException("需求不存在"));
         if (!"需求已确认".equals(req.getStatus())) {
             throw new RuntimeException("只有已确认的需求才能启动实施");
+        }
+        // 权限校验：只有主责项目经理（assignedPm）才能启动实施
+        if (StringUtils.hasText(req.getAssignedPm()) && !containsName(req.getAssignedPm(), operator.getName())) {
+            throw new RuntimeException("只有主责项目经理才能启动实施");
         }
         if (StringUtils.hasText(plannedTestDate))
             req.setPlannedTestDate(LocalDate.parse(plannedTestDate));
@@ -596,10 +681,14 @@ public class RequirementService {
         if (!"测试通过".equals(req.getStatus())) {
             throw new RuntimeException("只有测试通过的需求才能填写投产日期");
         }
+        // 权限校验：只有主责项目经理（assignedPm）才能填写投产日期
+        if (StringUtils.hasText(req.getAssignedPm()) && !containsName(req.getAssignedPm(), operator.getName())) {
+            throw new RuntimeException("只有主责项目经理才能填写投产日期");
+        }
         if (StringUtils.hasText(productionDate))
             req.setProductionDate(LocalDate.parse(productionDate));
         req.setStatus("已投产");
-        addComment(id, operator.getName(), req.getCurrentNode(), "投产",
+        addComment(id, operator.getName(), "项目经理", "投产",
                 "正式投产日期：" + productionDate);
         requirementRepository.save(req);
         return getDetail(id);
@@ -615,8 +704,12 @@ public class RequirementService {
         if (!"已投产".equals(req.getStatus())) {
             throw new RuntimeException("只有已投产的需求才能关闭");
         }
+        // 权限校验：只有需求提出人才能确认关闭
+        if (!trim(operator.getName()).equals(trim(req.getSubmitterName()))) {
+            throw new RuntimeException("只有需求提出人才能确认关闭");
+        }
         req.setStatus("已关闭");
-        addComment(id, operator.getName(), "业务人员", "确认",
+        addComment(id, operator.getName(), "提出人", "确认关闭",
                 "确认需求已完成，关闭需求。");
         requirementRepository.save(req);
         return getDetail(id);
@@ -644,6 +737,91 @@ public class RequirementService {
         commentRepository.save(c);
     }
 
+    /** 安全的 trim，null 安全 */
+    private static String trim(String s) {
+        return s == null ? null : s.trim();
+    }
+
+    /** 逗号/顿号分隔的名称列表中是否包含指定名称（trim 后比较） */
+    private static boolean containsName(String nameList, String targetName) {
+        if (nameList == null || targetName == null) return false;
+        String target = targetName.trim();
+        return java.util.Arrays.stream(nameList.split("[、,，]"))
+                .map(String::trim)
+                .anyMatch(n -> n.equals(target));
+    }
+
+    /** 检查用户是否拥有指定角色 */
+    private static boolean hasRole(User user, String roleCode) {
+        return user.getRoles().stream()
+                .anyMatch(r -> trim(roleCode).equals(trim(r.getCode())));
+    }
+
+    /** 检查用户是否有权操作当前需求所在的节点 */
+    private void checkCanActAtNode(Requirement req, User operator) {
+        String node = req.getCurrentNode();
+        String userName = trim(operator.getName());
+
+        switch (node) {
+            case "部门负责人": {
+                // 管理员可以跳过部门负责人校验
+                if (hasRole(operator, "ROLE_ADMIN")) break;
+                String deptName = req.getDept();
+                if (StringUtils.hasText(deptName)) {
+                    Department dept = departmentRepository.findByName(deptName).orElse(null);
+                    if (dept != null && !trim(userName).equals(trim(dept.getLeader()))) {
+                        throw new RuntimeException("只有" + deptName + "的部门负责人才能操作");
+                    }
+                }
+                break;
+            }
+            case "架构管理岗":
+                // 管理员可以跳过架构管理岗校验
+                if (hasRole(operator, "ROLE_ADMIN")) break;
+                if (!hasRole(operator, "ROLE_ARCHITECT")) {
+                    throw new RuntimeException("只有架构管理岗才能操作");
+                }
+                break;
+            case "团队组长": {
+                // 用户可能属于多个团队，检查所有团队
+                java.util.List<Team> allTeams = teamRepository.findAllByOrderByIdAsc();
+                java.util.List<String> userTeams = TeamUtils.findTeamNamesForUser(allTeams, userName);
+                if (userTeams.isEmpty()) {
+                    throw new RuntimeException("您不是任何团队的组长，无法操作");
+                }
+                boolean teamMatches = false;
+                if (StringUtils.hasText(req.getSystemItems())) {
+                    try {
+                        List<RequirementResponse.SystemItem> items = MAPPER.readValue(
+                                req.getSystemItems(), new TypeReference<List<RequirementResponse.SystemItem>>() {});
+                        teamMatches = items.stream().anyMatch(item ->
+                            userTeams.stream().anyMatch(ut -> trim(item.team()).equals(trim(ut))));
+                    } catch (JsonProcessingException e) { /* ignore */ }
+                }
+                if (!teamMatches) {
+                    throw new RuntimeException("您的团队不在该需求的涉及系统中，无法操作");
+                }
+                break;
+            }
+            case "产品经理":
+                if (StringUtils.hasText(req.getAssignedPd()) && !containsName(req.getAssignedPd(), userName)) {
+                    throw new RuntimeException("只有产品经理才能操作");
+                }
+                break;
+            case "多方确认":
+                List<java.util.Map<String, Object>> reviewers = parseSpecReviewers(req.getSpecReviewers());
+                boolean inReviewers = reviewers.stream()
+                        .anyMatch(r -> trim(userName).equals(trim((String) r.get("name"))));
+                if (!inReviewers) {
+                    throw new RuntimeException("您不在确认人员列表中，无法操作");
+                }
+                break;
+            default:
+                // 其他节点不限制
+                break;
+        }
+    }
+
     private RequirementResponse toResponse(Requirement r) {
         RequirementResponse resp = new RequirementResponse();
         resp.setId(r.getId());
@@ -663,6 +841,9 @@ public class RequirementService {
         resp.setAssignedPd(r.getAssignedPd());
         resp.setPrimarySystemName(r.getPrimarySystemName());
         resp.setSpecDocumentPath(r.getSpecDocumentPath());
+        resp.setSpecDocumentName(r.getSpecDocumentName());
+        resp.setReviewReportPath(r.getReviewReportPath());
+        resp.setReviewReportName(r.getReviewReportName());
         resp.setSpecReviewers(r.getSpecReviewers());
         resp.setAttachmentPath(r.getAttachmentPath());
         resp.setPlannedTestDate(r.getPlannedTestDate());

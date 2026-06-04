@@ -28,6 +28,9 @@ public class RequirementResponse {
     private List<DeploymentItem> deployments;
     private String primarySystemName;
     private String specDocumentPath;
+    private String specDocumentName;
+    private String reviewReportPath;
+    private String reviewReportName;
     private String specReviewers;
     private String attachmentPath;
     private LocalDate plannedTestDate;
@@ -84,6 +87,12 @@ public class RequirementResponse {
     public void setPrimarySystemName(String primarySystemName) { this.primarySystemName = primarySystemName; }
     public String getSpecDocumentPath() { return specDocumentPath; }
     public void setSpecDocumentPath(String specDocumentPath) { this.specDocumentPath = specDocumentPath; }
+    public String getSpecDocumentName() { return specDocumentName; }
+    public void setSpecDocumentName(String specDocumentName) { this.specDocumentName = specDocumentName; }
+    public String getReviewReportPath() { return reviewReportPath; }
+    public void setReviewReportPath(String reviewReportPath) { this.reviewReportPath = reviewReportPath; }
+    public String getReviewReportName() { return reviewReportName; }
+    public void setReviewReportName(String reviewReportName) { this.reviewReportName = reviewReportName; }
     public String getSpecReviewers() { return specReviewers; }
     public void setSpecReviewers(String specReviewers) { this.specReviewers = specReviewers; }
     public String getAttachmentPath() { return attachmentPath; }

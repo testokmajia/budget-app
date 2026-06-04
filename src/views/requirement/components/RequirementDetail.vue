@@ -3,11 +3,12 @@ import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import {
-  getById, approve, reject, evaluate, teamLeaderAssign,
+  getById, approve, deptApprove, reject, evaluate, teamLeaderAssign,
   uploadSpec, confirmSpec, resubmit, getSystems, getDefaultReviewers,
-  startImplementation, setProduction, closeRequirement
+  startImplementation, setProduction, closeRequirement, uploadRequestFile
 } from '@/api/requirement'
 import { getByRequirement } from '@/api/testReport'
+import { nameEquals, nameInList, findByName } from '@/utils/compare'
 
 const props = defineProps({ visible: Boolean, id: Number })
 const emit = defineEmits(['update:visible', 'close'])
@@ -20,6 +21,9 @@ const commentText = ref('')
 const systemOptions = ref([])
 const allUsers = ref([])
 const myTeamName = ref('')
+const myTeamNames = ref([])
+const myDeptName = ref('')
+const isDeptLeader = ref(false)
 
 // 架构管理岗
 const evalSystems = ref([{ name: '', team: '', owner: '', modification: '' }])
@@ -28,6 +32,13 @@ const primarySystem = ref('')
 // 产品经理 - 需求说明书
 const specReviewers = ref([])
 const specDocPath = ref('')
+const specDocName = ref('')
+const specFileList = ref([])
+
+// 架构管理岗 - 架构评审报告
+const reviewReportPath = ref('')
+const reviewReportName = ref('')
+const reviewFileList = ref([])
 
 // 确认后操作
 const implVisible = ref(false)
@@ -38,14 +49,15 @@ const productionDate = ref('')
 // 关联测试报告
 const relatedReports = ref([])
 
-// 审批节点（6节点，团队组长同时指派PM+PD）
+// 审批节点（7节点）
 const nodes = [
   { name: '提出人', role: '提交需求' },
-  { name: '部门负责人', role: '审批' },
+  { name: '部门负责人', role: '部门审批' },
   { name: '架构管理岗', role: '评估涉及系统' },
   { name: '团队组长', role: '指派PM和PD' },
   { name: '产品经理', role: '上传需求说明书' },
   { name: '多方确认', role: '确认需求说明书' },
+  { name: '项目经理', role: '启动实施' },
 ]
 
 const statusTagMap = {
@@ -65,7 +77,7 @@ const commentsByNode = computed(() => {
   if (!req.value?.comments) return {}
   const map = {}
   req.value.comments.forEach(c => {
-    const nodeKey = nodes.find(n => n.name === c.role)?.name || c.role
+    const nodeKey = findByName(nodes, c.role)?.name || c.role
     if (!map[nodeKey]) map[nodeKey] = []
     map[nodeKey].push(c)
   })
@@ -75,10 +87,34 @@ const commentsByNode = computed(() => {
 // 当前用户可编辑的系统（团队组长节点时只显示自己团队的系统）
 const editableSystems = computed(() => {
   if (req.value?.currentNode !== '团队组长') return systemItemsData.value
-  return systemItemsData.value.filter(s => {
-    if (myTeamName.value) return s.team === myTeamName.value
-    return true
-  })
+  return systemItemsData.value.filter(s => isMyTeam(s.team))
+})
+
+// 判断系统团队是否属于当前用户负责的团队之一
+function isMyTeam(sysTeam) {
+  if (!sysTeam) return false
+  if (myTeamNames.value.length > 0) {
+    return myTeamNames.value.some(t => nameEquals(sysTeam, t))
+  }
+  // 兼容单团队字段
+  if (myTeamName.value) return nameEquals(sysTeam, myTeamName.value)
+  return true // 未加载完成时默认显示
+}
+
+// 权限判断：当前用户是否有权操作当前节点
+const isAdmin = computed(() => userStore.hasRole('ROLE_ADMIN'))
+const isArchitect = computed(() => userStore.hasRole('ROLE_ARCHITECT'))
+const canActAsDeptLeader = computed(() => {
+  if (!req.value || req.value.currentNode !== '部门负责人') return false
+  return isAdmin.value || (isDeptLeader.value && req.value.dept === myDeptName.value)
+})
+const canActAsArchitect = computed(() => {
+  if (!req.value || req.value.currentNode !== '架构管理岗') return false
+  return isArchitect.value || isAdmin.value
+})
+const canActAsTeamLeader = computed(() => {
+  if (!req.value || req.value.currentNode !== '团队组长') return false
+  return editableSystems.value.length > 0
 })
 
 function showActions() {
@@ -90,7 +126,7 @@ function showActions() {
 
 // ==================== 系统选择 ====================
 function onSysSelect(index, name) {
-  const sys = systemOptions.value.find(s => s.name === name)
+  const sys = findByName(systemOptions.value, name)
   if (sys) {
     evalSystems.value[index].team = sys.team || ''
     evalSystems.value[index].owner = sys.leader || ''
@@ -109,7 +145,16 @@ async function doApprove() {
   try {
     await approve(props.id, { comment: commentText.value })
     ElMessage.success('审批通过')
-    await reload()
+    setTimeout(() => emit('update:visible', false), 800)
+  } catch (e) { ElMessage.error(e.response?.data?.error || '操作失败') } finally { actionLoading.value = false; commentText.value = '' }
+}
+
+async function doDeptApprove() {
+  actionLoading.value = true
+  try {
+    await deptApprove(props.id, { comment: commentText.value })
+    ElMessage.success('部门审批通过')
+    setTimeout(() => emit('update:visible', false), 800)
   } catch (e) { ElMessage.error(e.response?.data?.error || '操作失败') } finally { actionLoading.value = false; commentText.value = '' }
 }
 
@@ -119,7 +164,7 @@ async function doReject() {
   try {
     await reject(props.id, { comment: commentText.value })
     ElMessage.success('已驳回')
-    await reload()
+    setTimeout(() => emit('update:visible', false), 800)
   } catch (e) { ElMessage.error(e.response?.data?.error || '操作失败') } finally { actionLoading.value = false; commentText.value = '' }
 }
 
@@ -133,9 +178,11 @@ async function doEvaluate() {
       systemItems: JSON.stringify(sys),
       primarySystemName: primarySystem.value,
       comment: commentText.value,
+      reviewReportPath: reviewReportPath.value || undefined,
+      reviewReportName: reviewReportName.value || undefined,
     })
     ElMessage.success('评估已提交')
-    await reload()
+    setTimeout(() => emit('update:visible', false), 800)
   } catch (e) { ElMessage.error(e.response?.data?.error || '操作失败') } finally { actionLoading.value = false; commentText.value = '' }
 }
 
@@ -151,20 +198,50 @@ async function doTeamAssign() {
       comment: commentText.value,
     })
     ElMessage.success('指派完成')
-    await reload()
+    emit('update:visible', false)
   } catch (e) { ElMessage.error(e.response?.data?.error || '操作失败') } finally { actionLoading.value = false }
+}
+
+// 上传附件（产品经理用）
+const uploadLoading = ref(false)
+async function handleSpecUpload(options) {
+  uploadLoading.value = true
+  try {
+    const res = await uploadRequestFile(options.file)
+    specDocPath.value = res.data.filePath
+    specDocName.value = res.data.fileName
+    ElMessage.success('上传成功')
+  } catch (e) { ElMessage.error(e.response?.data?.error || '上传失败') } finally { uploadLoading.value = false }
+}
+
+// 上传架构评审报告（架构管理岗用）
+const reviewUploadLoading = ref(false)
+async function handleReviewUpload(options) {
+  reviewUploadLoading.value = true
+  try {
+    const res = await uploadRequestFile(options.file)
+    reviewReportPath.value = res.data.filePath
+    reviewReportName.value = res.data.fileName
+    ElMessage.success('架构评审报告上传成功')
+  } catch (e) { ElMessage.error(e.response?.data?.error || '上传失败') } finally { reviewUploadLoading.value = false }
 }
 
 async function doUploadSpec() {
   actionLoading.value = true
   try {
+    // 如果上传了文件，使用上传后的路径；否则保留已有路径
+    const docPath = specDocPath.value || req.value?.specDocumentPath || ''
+    if (!docPath) { ElMessage.warning('请上传需求说明书'); return }
     await uploadSpec(props.id, {
-      specDocumentPath: specDocPath.value || '/uploads/spec-placeholder.pdf',
+      specDocumentPath: docPath,
+      specDocumentName: specDocName.value || req.value?.specDocumentName || '',
       specReviewers: JSON.stringify(specReviewers.value),
       comment: commentText.value,
     })
     ElMessage.success('需求说明书已提交')
     await reload()
+    // 自动关闭弹窗
+    setTimeout(() => emit('update:visible', false), 800)
   } catch (e) { ElMessage.error(e.response?.data?.error || '操作失败') } finally { actionLoading.value = false; commentText.value = '' }
 }
 
@@ -173,7 +250,7 @@ async function doConfirmSpec() {
   try {
     await confirmSpec(props.id, { comment: commentText.value || '确认需求说明书' })
     ElMessage.success('确认完成')
-    await reload()
+    setTimeout(() => emit('update:visible', false), 800)
   } catch (e) { ElMessage.error(e.response?.data?.error || '操作失败') } finally { actionLoading.value = false; commentText.value = '' }
 }
 
@@ -197,7 +274,7 @@ async function doStartImpl() {
     })
     ElMessage.success('实施已启动')
     implVisible.value = false
-    await reload()
+    setTimeout(() => emit('update:visible', false), 800)
   } catch (e) { ElMessage.error(e.response?.data?.error || '操作失败') } finally { actionLoading.value = false }
 }
 
@@ -213,7 +290,7 @@ async function doSetProduction() {
     await setProduction(props.id, { productionDate: productionDate.value })
     ElMessage.success('投产日期已填写')
     productionVisible.value = false
-    await reload()
+    setTimeout(() => emit('update:visible', false), 800)
   } catch (e) { ElMessage.error(e.response?.data?.error || '操作失败') } finally { actionLoading.value = false }
 }
 
@@ -222,7 +299,7 @@ async function doCloseReq() {
   try {
     await closeRequirement(props.id)
     ElMessage.success('需求已关闭')
-    await reload()
+    setTimeout(() => emit('update:visible', false), 800)
   } catch (e) { ElMessage.error(e.response?.data?.error || '操作失败') } finally { actionLoading.value = false }
 }
 
@@ -260,6 +337,16 @@ async function loadData() {
   if (!props.id) return
   loading.value = true
   try {
+    // 重置状态，防止上一个需求的旧数据残留
+    systemItemsData.value = []
+    specReviewers.value = []
+    primarySystem.value = ''
+    evalSystems.value = [{ name: '', team: '', owner: '', modification: '' }]
+    specDocPath.value = ''
+    specDocName.value = ''
+    reviewReportPath.value = ''
+    reviewReportName.value = ''
+
     const res = await getById(props.id)
     req.value = res.data
     if (req.value) {
@@ -275,6 +362,8 @@ async function loadData() {
       if (req.value.specReviewers) {
         try { specReviewers.value = JSON.parse(req.value.specReviewers) } catch { specReviewers.value = [] }
       }
+      if (req.value.reviewReportPath) reviewReportPath.value = req.value.reviewReportPath
+      if (req.value.reviewReportName) reviewReportName.value = req.value.reviewReportName
       if (req.value.currentNode === '产品经理' && specReviewers.value.length === 0) {
         await loadReviewers()
       }
@@ -292,6 +381,9 @@ async function loadUsers() {
     const res = await getFilterOptions()
     allUsers.value = res.data?.submitters || []
     myTeamName.value = res.data?.myTeamName || ''
+    myTeamNames.value = res.data?.myTeamNames || []
+    myDeptName.value = res.data?.myDeptName || ''
+    isDeptLeader.value = res.data?.isDeptLeader || false
   } catch (e) { /* ignore */ }
 }
 
@@ -305,6 +397,10 @@ async function reload() {
 watch(() => props.id, (val) => {
   if (val) { loadData(); loadSystems(); loadRelatedReports(); loadUsers() }
 })
+// 每次打开弹窗时强制重新加载数据，防止缓存旧数据
+watch(() => props.visible, (val) => {
+  if (val && props.id) { loadData(); loadSystems(); loadRelatedReports(); loadUsers() }
+})
 </script>
 
 <template>
@@ -313,6 +409,7 @@ watch(() => props.id, (val) => {
     :title="req ? req.requirementCode + ' · ' + req.title : '需求详情'"
     width="1200px" top="3vh" :close-on-click-modal="false" destroy-on-close
     @update:model-value="emit('update:visible', $event)"
+    @closed="emit('close')"
   >
     <div v-if="req" class="detail-layout" v-loading="loading">
       <!-- 左栏：主内容 -->
@@ -334,20 +431,58 @@ watch(() => props.id, (val) => {
           <el-descriptions-item label="期望完成">{{ req.expectedDate || '—' }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ req.createdAt?.substring(0, 10) }}</el-descriptions-item>
           <el-descriptions-item label="当前节点">{{ req.currentNode }}</el-descriptions-item>
-          <el-descriptions-item v-if="req.specDocumentPath" label="需求说明书" :span="2">
-            <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.specDocumentPath)}`" target="_blank">
-              📄 {{ (req.specDocumentPath || '').split('/').pop() }}
-            </el-link>
-          </el-descriptions-item>
-          <el-descriptions-item v-if="req.attachmentPath" label="附件" :span="2">
-            <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.attachmentPath)}`" target="_blank">
-              📎 {{ (req.attachmentPath || '').split('/').pop() }}
-            </el-link>
-          </el-descriptions-item>
           <el-descriptions-item v-if="req.plannedTestDate" label="计划测试">{{ req.plannedTestDate }}</el-descriptions-item>
           <el-descriptions-item v-if="req.plannedProductionDate" label="计划投产">{{ req.plannedProductionDate }}</el-descriptions-item>
           <el-descriptions-item v-if="req.productionDate" label="正式投产">{{ req.productionDate }}</el-descriptions-item>
         </el-descriptions>
+
+        <!-- 附件区（需求说明书、架构评审报告、测试报告附件集中展示） -->
+        <div v-if="req.specDocumentPath || req.reviewReportPath || req.attachmentPath || relatedReports.length" class="section-block">
+          <h4 class="section-title">📎 需求附件</h4>
+          <div class="attach-group">
+            <!-- 需求说明书 -->
+            <div v-if="req.specDocumentPath" class="attach-item">
+              <span class="attach-icon">📄</span>
+              <span class="attach-label">需求说明书：</span>
+              <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.specDocumentPath)}&name=${encodeURIComponent(req.specDocumentName || req.specDocumentPath.split('/').pop())}`" target="_blank">
+                {{ req.specDocumentName || (req.specDocumentPath || '').split('/').pop() }}
+              </el-link>
+              <el-tag v-if="req.status === '需求已确认' || req.status === '实施中' || req.status === '测试通过' || req.status === '已投产' || req.status === '已关闭'" type="success" size="small" class="attach-status">已确认</el-tag>
+              <el-tag v-else-if="req.currentNode === '多方确认'" type="primary" size="small" class="attach-status">确认中</el-tag>
+              <el-tag v-else-if="req.currentNode === '产品经理'" type="warning" size="small" class="attach-status">待提交</el-tag>
+              <el-tag v-else type="info" size="small" class="attach-status">待确认</el-tag>
+            </div>
+            <!-- 架构评审报告 -->
+            <div v-if="req.reviewReportPath" class="attach-item">
+              <span class="attach-icon">📎</span>
+              <span class="attach-label">架构评审报告：</span>
+              <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.reviewReportPath)}&name=${encodeURIComponent(req.reviewReportName || req.reviewReportPath.split('/').pop())}`" target="_blank">
+                {{ req.reviewReportName || (req.reviewReportPath || '').split('/').pop() }}
+              </el-link>
+              <el-tag type="success" size="small" class="attach-status">已上传</el-tag>
+            </div>
+            <!-- 通用附件 -->
+            <div v-if="req.attachmentPath" class="attach-item">
+              <span class="attach-icon">📎</span>
+              <span class="attach-label">附件：</span>
+              <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.attachmentPath)}`" target="_blank">
+                {{ (req.attachmentPath || '').split('/').pop() }}
+              </el-link>
+              <el-tag type="success" size="small" class="attach-status">已上传</el-tag>
+            </div>
+            <!-- 关联测试报告附件 -->
+            <template v-for="tr in relatedReports" :key="'tra-' + tr.id">
+              <div v-if="tr.testReportPath" class="attach-item">
+                <span class="attach-icon">🧪</span>
+                <span class="attach-label">测试报告 {{ tr.reportCode || '' }}（{{ tr.title }}）：</span>
+                <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(tr.testReportPath)}&name=${encodeURIComponent(tr.testReportName || tr.testReportPath.split('/').pop())}`" target="_blank">
+                  {{ tr.testReportName || (tr.testReportPath || '').split('/').pop() }}
+                </el-link>
+                <el-tag :type="tr.status === '已确认' ? 'success' : 'info'" size="small" class="attach-status">{{ tr.status }}</el-tag>
+              </div>
+            </template>
+          </div>
+        </div>
 
         <!-- 涉及系统 + PM/PD 合并展示 -->
         <div v-if="systemItemsData.length && req.nodeIndex >= 2" class="section-block">
@@ -365,19 +500,19 @@ watch(() => props.id, (val) => {
               :key="i"
               class="sys-table-row"
               :class="{
-                'is-primary': sys.name === req.primarySystemName,
-                'is-other-team': req.currentNode === '团队组长' && myTeamName && sys.team !== myTeamName
+                'is-primary': nameEquals(sys.name, req.primarySystemName),
+                'is-other-team': req.currentNode === '团队组长' && myTeamNames.length > 0 && !isMyTeam(sys.team)
               }"
             >
               <span class="st-col-name">
                 {{ sys.name }}
-                <el-tag v-if="sys.name === req.primarySystemName" type="danger" size="small" effect="dark" class="primary-tag">主责</el-tag>
+                <el-tag v-if="nameEquals(sys.name, req.primarySystemName)" type="danger" size="small" effect="dark" class="primary-tag">主责</el-tag>
               </span>
               <span class="st-col-team">{{ sys.team }} · {{ sys.owner }}</span>
               <span class="st-col-mod">{{ sys.modification }}</span>
               <span class="st-col-pm">
                 <!-- 团队组长节点：同时可编辑PM和PD -->
-                <template v-if="req.currentNode === '团队组长' && req.status === '审批中' && (!myTeamName || sys.team === myTeamName)">
+                <template v-if="req.currentNode === '团队组长' && req.status === '审批中' && isMyTeam(sys.team)">
                   <el-select v-model="sys.pm" placeholder="选PM" size="small" style="width: 100%" filterable>
                     <el-option v-for="u in userOptions" :key="u" :label="u" :value="u" />
                   </el-select>
@@ -387,7 +522,7 @@ watch(() => props.id, (val) => {
                 </template>
               </span>
               <span class="st-col-pd">
-                <template v-if="req.currentNode === '团队组长' && req.status === '审批中' && (!myTeamName || sys.team === myTeamName)">
+                <template v-if="req.currentNode === '团队组长' && req.status === '审批中' && isMyTeam(sys.team)">
                   <el-select v-model="sys.pd" placeholder="选PD" size="small" style="width: 100%" filterable>
                     <el-option v-for="u in userOptions" :key="u" :label="u" :value="u" />
                   </el-select>
@@ -432,10 +567,15 @@ watch(() => props.id, (val) => {
           <h4 class="section-title">关联测试报告</h4>
           <div v-for="tr in relatedReports" :key="tr.id" class="related-report-card">
             <div class="rr-header">
-              <span class="rr-title">{{ tr.title }}</span>
+              <span class="rr-title">{{ tr.reportCode ? tr.reportCode + ' · ' : '' }}{{ tr.title }}</span>
               <el-tag :type="tr.status === '已确认' ? 'success' : 'info'" size="small">{{ tr.status }}</el-tag>
             </div>
             <div class="rr-meta">关联需求：{{ tr.requirementCodes }} | 计划测试：{{ tr.plannedTestDate || '—' }}</div>
+            <div v-if="tr.testReportPath" class="rr-attach">
+              <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(tr.testReportPath)}&name=${encodeURIComponent(tr.testReportName || tr.testReportPath.split('/').pop())}`" target="_blank">
+                📄 下载测试报告：{{ tr.testReportName || (tr.testReportPath || '').split('/').pop() }}
+              </el-link>
+            </div>
           </div>
         </div>
 
@@ -444,16 +584,19 @@ watch(() => props.id, (val) => {
           <h4 class="section-title">操作</h4>
           <div class="post-confirm-actions">
             <div v-if="req.status === '需求已确认'">
-              <el-button type="primary" @click="openImplDialog">启动实施</el-button>
+              <el-button v-if="userStore.user?.name && nameInList(req.assignedPm, userStore.user.name)" type="primary" @click="openImplDialog">启动实施</el-button>
+              <p v-else class="action-tip">等待项目经理（{{ req.assignedPm || '未指派' }}）启动实施</p>
             </div>
             <div v-else-if="req.status === '实施中'">
               <p class="action-tip">实施中，等待测试报告确认…</p>
             </div>
             <div v-else-if="req.status === '测试通过'">
-              <el-button type="primary" @click="openProductionDialog">填写正式投产日期</el-button>
+              <el-button v-if="userStore.user?.name && nameInList(req.assignedPm, userStore.user.name)" type="primary" @click="openProductionDialog">填写正式投产日期</el-button>
+              <p v-else class="action-tip">等待项目经理（{{ req.assignedPm || '未指派' }}）填写投产日期</p>
             </div>
             <div v-else-if="req.status === '已投产'">
-              <el-button type="success" @click="doCloseReq">确认关闭</el-button>
+              <el-button v-if="userStore.user?.name && nameEquals(userStore.user.name, req.submitterName)" type="success" @click="doCloseReq">确认关闭</el-button>
+              <p v-else class="action-tip">等待提出人（{{ req.submitterName || '未知' }}）确认关闭</p>
             </div>
           </div>
         </div>
@@ -463,16 +606,24 @@ watch(() => props.id, (val) => {
           <h4 class="section-title">当前节点操作</h4>
 
           <!-- 部门负责人 -->
-          <div v-if="req.currentNode === '部门负责人'" class="action-area">
-            <el-input v-model="commentText" type="textarea" :rows="3" placeholder="请输入审批意见（可选）" />
+          <div v-if="canActAsDeptLeader" class="action-area">
+            <p class="action-tip">作为部门负责人，审批该需求：</p>
+            <el-input v-model="commentText" type="textarea" :rows="2" placeholder="审批意见（可选）" style="margin-bottom: 10px" />
             <div class="action-btns">
               <el-button type="danger" @click="doReject">驳回至提出人</el-button>
-              <el-button type="primary" :loading="actionLoading" @click="doApprove">审批通过</el-button>
+              <el-button type="primary" :loading="actionLoading" @click="doDeptApprove">审批通过</el-button>
             </div>
           </div>
 
           <!-- 架构管理岗 -->
-          <div v-else-if="req.currentNode === '架构管理岗'" class="action-area">
+          <div v-if="canActAsArchitect" class="action-area">
+            <!-- 需求说明书展示 -->
+            <div v-if="req.specDocumentPath" class="attach-view">
+              <span class="attach-label">📄 需求说明书：</span>
+              <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.specDocumentPath)}&name=${encodeURIComponent(req.specDocumentName || req.specDocumentPath.split('/').pop())}`" target="_blank">
+                {{ req.specDocumentName || req.specDocumentPath.split('/').pop() }}
+              </el-link>
+            </div>
             <p class="action-tip">选择涉及系统并指定主责系统：</p>
             <div v-for="(sys, i) in evalSystems" :key="i" class="eval-row-wrap">
               <div class="eval-row">
@@ -490,6 +641,15 @@ watch(() => props.id, (val) => {
               <el-input v-model="sys.modification" type="textarea" :rows="3" placeholder="改造内容描述…" style="margin-top: 6px" />
             </div>
             <el-button size="small" style="margin-top: 8px" @click="addEvalSystem">+ 新增涉及系统</el-button>
+            <!-- 架构评审报告上传 -->
+            <div style="margin-top: 12px">
+              <span class="field-label">架构评审报告：</span>
+              <el-upload :http-request="handleReviewUpload" :limit="1" :on-exceed="() => ElMessage.warning('仅支持上传一个文件')" :file-list="reviewFileList">
+                <el-button type="primary" plain size="small" :loading="reviewUploadLoading">选择文件上传</el-button>
+              </el-upload>
+              <span v-if="reviewReportName" style="font-size:12px;color:#006eff;margin-left:8px">已选择：{{ reviewReportName }}</span>
+              <span v-else style="font-size:12px;color:#a8abb2;margin-left:8px">文件名自动命名为"需求标题+架构预审报告"</span>
+            </div>
             <el-input v-model="commentText" type="textarea" :rows="2" placeholder="评估意见（可选）" style="margin-top: 10px" />
             <div class="action-btns">
               <el-button type="danger" @click="doReject">驳回至提出人</el-button>
@@ -498,12 +658,24 @@ watch(() => props.id, (val) => {
           </div>
 
           <!-- 产品经理 -->
-          <div v-else-if="req.currentNode === '产品经理'" class="action-area">
+          <div v-else-if="req.currentNode === '产品经理' && userStore.user?.name && nameInList(req.assignedPd, userStore.user.name)" class="action-area">
             <p class="action-tip">上传/更新需求说明书并设置确认人员：</p>
+            <!-- 已有附件展示 -->
+            <div v-if="req.specDocumentPath || req.reviewReportPath" class="attach-view" style="margin-bottom:12px">
+              <template v-if="req.specDocumentPath">
+                📄 <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.specDocumentPath)}&name=${encodeURIComponent(req.specDocumentName || req.specDocumentPath.split('/').pop())}`" target="_blank">需求说明书</el-link>
+              </template>
+              <template v-if="req.reviewReportPath">
+                <span v-if="req.specDocumentPath" style="margin: 0 8px">|</span>
+                📎 <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.reviewReportPath)}&name=${encodeURIComponent(req.reviewReportName || req.reviewReportPath.split('/').pop())}`" target="_blank">架构评审报告</el-link>
+              </template>
+            </div>
             <div style="margin-bottom: 12px">
-              <span class="field-label">需求说明书：</span>
-              <el-input v-model="specDocPath" placeholder="文件路径或URL" style="width: 400px" />
-              <span v-if="req.specDocumentPath" style="font-size:12px;color:#a8abb2;margin-left:8px">当前：{{ req.specDocumentPath }}</span>
+              <span class="field-label">更新需求说明书：</span>
+              <el-upload :http-request="handleSpecUpload" :limit="1" :on-exceed="() => ElMessage.warning('仅支持上传一个文件')" :file-list="specFileList">
+                <el-button type="primary" plain size="small" :loading="uploadLoading">选择文件上传</el-button>
+              </el-upload>
+              <span v-if="specDocName" style="font-size:12px;color:#006eff;margin-left:8px">新上传：{{ specDocName }}</span>
             </div>
             <p class="field-label">确认人员：</p>
             <div class="reviewer-table">
@@ -533,12 +705,22 @@ watch(() => props.id, (val) => {
             <el-button size="small" style="margin-top: 8px" @click="addReviewer">+ 新增确认人员</el-button>
             <el-input v-model="commentText" type="textarea" :rows="2" placeholder="备注（可选）" style="margin-top: 10px" />
             <div class="action-btns">
-              <el-button type="primary" :loading="actionLoading" @click="doUploadSpec">提交需求说明书</el-button>
+              <el-button type="primary" :loading="actionLoading" @click="doUploadSpec">提交评审</el-button>
             </div>
           </div>
 
           <!-- 多方确认 -->
-          <div v-else-if="req.currentNode === '多方确认'" class="action-area">
+          <div v-else-if="req.currentNode === '多方确认' && specReviewers.some(r => nameEquals(r.name, userStore.user?.name))" class="action-area">
+            <!-- 附件展示 -->
+            <div v-if="req.specDocumentPath || req.reviewReportPath" class="attach-view">
+              <template v-if="req.specDocumentPath">
+                📄 <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.specDocumentPath)}&name=${encodeURIComponent(req.specDocumentName || req.specDocumentPath.split('/').pop())}`" target="_blank">需求说明书</el-link>
+              </template>
+              <template v-if="req.reviewReportPath">
+                <span v-if="req.specDocumentPath" style="margin: 0 8px">|</span>
+                📎 <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.reviewReportPath)}&name=${encodeURIComponent(req.reviewReportName || req.reviewReportPath.split('/').pop())}`" target="_blank">架构评审报告</el-link>
+              </template>
+            </div>
             <p class="action-tip">以下人员需逐一确认需求说明书，全部确认后状态变更为「需求已确认」：</p>
             <div class="reviewer-table">
               <div class="reviewer-header">
@@ -565,7 +747,7 @@ watch(() => props.id, (val) => {
           </div>
 
           <!-- 已驳回 -->
-          <div v-else-if="req.status === '已驳回'" class="action-area">
+          <div v-else-if="req.status === '已驳回' && nameEquals(userStore.user?.name, req.submitterName)" class="action-area">
             <p class="action-tip">需求已被驳回，修改后重新提交。</p>
             <el-input v-model="commentText" type="textarea" :rows="2" placeholder="请说明修改内容…" />
             <div class="action-btns">
@@ -575,13 +757,23 @@ watch(() => props.id, (val) => {
         </div>
 
         <!-- 团队组长操作区 -->
-        <div v-if="req.currentNode === '团队组长' && req.status === '审批中'" class="section-block">
+        <div v-if="canActAsTeamLeader && req.status === '审批中'" class="section-block">
           <h4 class="section-title">当前节点操作 · 团队组长</h4>
+          <!-- 附件展示 -->
+          <div v-if="req.specDocumentPath || req.reviewReportPath" class="attach-view">
+            <template v-if="req.specDocumentPath">
+              📄 <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.specDocumentPath)}&name=${encodeURIComponent(req.specDocumentName || req.specDocumentPath.split('/').pop())}`" target="_blank">需求说明书</el-link>
+            </template>
+            <template v-if="req.reviewReportPath">
+              <span v-if="req.specDocumentPath" style="margin: 0 8px">|</span>
+              📎 <el-link type="primary" :href="`/api/files/download?path=${encodeURIComponent(req.reviewReportPath)}&name=${encodeURIComponent(req.reviewReportName || req.reviewReportPath.split('/').pop())}`" target="_blank">架构评审报告</el-link>
+            </template>
+          </div>
           <p class="action-tip">
             为所负责系统的指派项目经理和产品经理（在上方系统表中同时编辑PM和PD列）。
-            <template v-if="myTeamName">
-              您负责团队：<b>{{ myTeamName }}</b>
-              <span v-if="systemItemsData.some(s => s.team !== myTeamName)" style="color: #ff9c00">
+            <template v-if="myTeamNames.length > 0">
+              您负责团队：<b>{{ myTeamNames.join('、') }}</b>
+              <span v-if="systemItemsData.some(s => !isMyTeam(s.team))" style="color: #ff9c00">
                 （其他团队的系统由对应团队负责人指派）
               </span>
             </template>
@@ -620,8 +812,8 @@ watch(() => props.id, (val) => {
                   <span v-if="req.status === '已驳回' && i === 0" class="feed-rejected-badge">已驳回至此</span>
                 </div>
 
-                <!-- 团队组长节点：显示各系统指派状态 -->
-                <div v-if="node.name === '团队组长' && systemItemsData.length" class="feed-sub-status">
+                <!-- 团队组长节点：显示各系统指派状态（仅已到达或超过该节点时显示） -->
+                <div v-if="node.name === '团队组长' && i <= req.nodeIndex && systemItemsData.length" class="feed-sub-status">
                   <div v-for="sys in systemItemsData" :key="'ts-' + sys.name" class="sub-status-row">
                     <span class="ss-dot" :class="{ done: sys.pm && sys.pd }"></span>
                     <span class="ss-name">{{ sys.name }}</span>
@@ -630,8 +822,8 @@ watch(() => props.id, (val) => {
                   </div>
                 </div>
 
-                <!-- 多方确认节点：显示每个确认人员状态 -->
-                <div v-if="node.name === '多方确认' && specReviewers.length" class="feed-sub-status">
+                <!-- 多方确认节点：显示每个确认人员状态（仅已到达或超过该节点时显示） -->
+                <div v-if="node.name === '多方确认' && i <= req.nodeIndex && specReviewers.length" class="feed-sub-status">
                   <div v-for="r in specReviewers" :key="'cr-' + r.name" class="sub-status-row">
                     <span class="ss-dot" :class="{ done: r.confirmed }"></span>
                     <span class="ss-name">{{ r.name }}</span>
@@ -705,7 +897,8 @@ watch(() => props.id, (val) => {
 .approval-panel {
   position: sticky;
   top: 0;
-  max-height: 65vh;
+  height: calc(100vh - 180px);
+  max-height: none;
   overflow-y: auto;
   background: #fafbfc;
   border: 1px solid #ebeef5;
@@ -827,6 +1020,17 @@ watch(() => props.id, (val) => {
 .rr-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .rr-title { font-size: 13px; font-weight: 500; }
 .rr-meta { font-size: 12px; color: #a8abb2; }
+.rr-attach { margin-top: 6px; padding-top: 6px; border-top: 1px solid #ebeef5; font-size: 12px; }
 
 .post-confirm-actions { display: flex; gap: 8px; align-items: center; }
+
+.attach-view { margin-bottom: 8px; padding: 8px 12px; background: #f5f7fa; border-radius: 4px; display: flex; align-items: center; gap: 8px; }
+.attach-label { font-size: 13px; color: #606266; white-space: nowrap; }
+
+/* 附件集中展示区 */
+.attach-group { padding: 8px 0; }
+.attach-item { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 4px; background: #fafbfc; border-radius: 4px; border: 1px solid #ebeef5; font-size: 13px; }
+.attach-item:last-child { margin-bottom: 0; }
+.attach-icon { font-size: 14px; flex-shrink: 0; }
+.attach-status { margin-left: auto; flex-shrink: 0; }
 </style>

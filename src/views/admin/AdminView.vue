@@ -3,6 +3,7 @@ import { ref, onMounted, reactive, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete, Download, Search, View } from '@element-plus/icons-vue'
 import { getUsers, createUser, updateUser, toggleUser, resetPassword, getRoles, getCategories, createCategory, updateCategory, deleteCategory, getDepartments, createDepartment, updateDepartment, deleteDepartment, getDepartmentsPaged, getSystems, createSystem, updateSystem, deleteSystem, getSystemsPaged, getTeams, createTeam, updateTeam, deleteTeam, getOccasions, createOccasion, updateOccasion, deleteOccasion, getConfigs, saveConfig, viewConfigValue, updateConfig, deleteConfig, exportUsers, exportCategories, exportDepartments, exportSystems, exportTeams, exportOccasions } from '@/api/admin'
+import { nameEquals } from '@/utils/compare'
 
 const activeTab = ref('users')
 
@@ -314,7 +315,7 @@ const teamForm = reactive({ name: '', department: '', leader: '', members: [], s
 
 const filteredMembers = computed(() => {
   if (!teamForm.department) return allUsers.value
-  return allUsers.value.filter(u => u.department === teamForm.department)
+  return allUsers.value.filter(u => nameEquals(u.department, teamForm.department))
 })
 const isTeamEdit = ref(false)
 const editTeamId = ref(null)

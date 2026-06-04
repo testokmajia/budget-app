@@ -42,7 +42,7 @@ public class DepartmentReport extends BaseEntity {
     public LocalDate getWeekEndDate() { return weekEndDate; }
     public void setWeekEndDate(LocalDate weekEndDate) { this.weekEndDate = weekEndDate; }
     public String getDepartment() { return department; }
-    public void setDepartment(String department) { this.department = department; }
+    public void setDepartment(String department) { this.department = department != null ? department.trim() : null; }
     public String getMergedContent() { return mergedContent; }
     public void setMergedContent(String mergedContent) { this.mergedContent = mergedContent; }
     public String getEditedContent() { return editedContent; }

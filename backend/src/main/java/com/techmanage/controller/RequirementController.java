@@ -65,11 +65,12 @@ public class RequirementController {
             @RequestParam(required = false) Long submitterId,
             @RequestParam(required = false) String sysOwner,
             @RequestParam(required = false) LocalDate dateFrom,
-            @RequestParam(required = false) LocalDate dateTo) {
+            @RequestParam(required = false) LocalDate dateTo,
+            @RequestParam(required = false) String currentNode) {
 
         var result = requirementService.list(
                 keyword, status, priority, dept, submitterId, sysOwner,
-                dateFrom, dateTo, page, size, sortBy, sortDir);
+                dateFrom, dateTo, currentNode, page, size, sortBy, sortDir);
         return ApiResponse.ok(PageResponse.of(
                 result.getContent(), result.getTotalElements(), page, size));
     }
@@ -138,13 +139,30 @@ public class RequirementController {
                 .collect(Collectors.toList()));
 
         // 当前用户所属团队名称（团队组长指派PM/PD时使用）
+        // 以及部门负责人信息（用于前端权限判断）
         if (auth != null) {
             User currentUser = currentUser(auth);
-            String teamName = TeamUtils.findTeamNameForUser(
-                    teamRepository.findAllByOrderByIdAsc(), currentUser.getName());
+            java.util.List<Team> allTeams = teamRepository.findAllByOrderByIdAsc();
+            String teamName = TeamUtils.findTeamNameForUser(allTeams, currentUser.getName());
             options.put("myTeamName", teamName != null ? teamName : "");
+            // 用户可能属于多个团队，返回所有团队名列表
+            java.util.List<String> allTeamNames = TeamUtils.findTeamNamesForUser(allTeams, currentUser.getName());
+            options.put("myTeamNames", allTeamNames);
+
+            String userDept = currentUser.getDepartment();
+            options.put("myDeptName", userDept != null ? userDept : "");
+            boolean isDeptLeader = false;
+            if (userDept != null && !userDept.isBlank()) {
+                isDeptLeader = departmentRepository.findByName(userDept)
+                        .map(d -> currentUser.getName().trim().equals(d.getLeader() != null ? d.getLeader().trim() : ""))
+                        .orElse(false);
+            }
+            options.put("isDeptLeader", isDeptLeader);
         } else {
             options.put("myTeamName", "");
+            options.put("myTeamNames", java.util.List.of());
+            options.put("myDeptName", "");
+            options.put("isDeptLeader", false);
         }
 
         return ApiResponse.ok(options);
@@ -168,7 +186,7 @@ public class RequirementController {
     }
 
     /**
-     * 审批通过
+     * 审批通过（通用）
      */
     @PostMapping("/{id}/approve")
     public ApiResponse<RequirementResponse> approve(@PathVariable Long id,
@@ -177,6 +195,18 @@ public class RequirementController {
         User user = currentUser(auth);
         String comment = request != null ? request.getComment() : null;
         return ApiResponse.ok(requirementService.approve(id, user, comment));
+    }
+
+    /**
+     * 部门负责人审批
+     */
+    @PostMapping("/{id}/dept-approve")
+    public ApiResponse<RequirementResponse> deptLeaderApprove(@PathVariable Long id,
+                                                               @RequestBody(required = false) RequirementRequest request,
+                                                               Authentication auth) {
+        User user = currentUser(auth);
+        String comment = request != null ? request.getComment() : null;
+        return ApiResponse.ok(requirementService.deptLeaderApprove(id, user, comment));
     }
 
     /**
@@ -201,7 +231,8 @@ public class RequirementController {
                                                       Authentication auth) {
         User user = currentUser(auth);
         return ApiResponse.ok(requirementService.evaluate(id, user,
-                request.getSystemItems(), request.getPrimarySystemName(), request.getComment()));
+                request.getSystemItems(), request.getPrimarySystemName(), request.getComment(),
+                request.getReviewReportPath(), request.getReviewReportName()));
     }
 
     /**
@@ -225,7 +256,8 @@ public class RequirementController {
                                                         Authentication auth) {
         User user = currentUser(auth);
         return ApiResponse.ok(requirementService.uploadSpec(id, user,
-                request.getSpecDocumentPath(), request.getSpecReviewers(), request.getComment()));
+                request.getSpecDocumentPath(), request.getSpecReviewers(), request.getComment(),
+                request.getSpecDocumentName()));
     }
 
     /**

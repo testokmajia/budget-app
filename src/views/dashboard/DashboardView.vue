@@ -1,14 +1,18 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { getStats } from '@/api/dashboard'
 import { useUserStore } from '@/stores/user'
+import { nameEquals } from '@/utils/compare'
 import { DataBoard, Clock, WarningFilled, CircleCheckFilled } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const userStore = useUserStore()
 const stats = ref(null)
 const loading = ref(true)
+const activeTab = ref('overview')
 
-const isItDept = computed(() => userStore.user?.department === '信息科技部')
+const isItDept = computed(() => nameEquals(userStore.user?.department, '信息科技部'))
 
 const statusColors = {
   '待分派': '#909399',
@@ -69,6 +73,41 @@ const reqSegments = computed(() => {
   ].filter(s => s.count > 0)
 })
 
+// 待办事项分类
+const taskCategories = computed(() => {
+  const tasks = stats.value?.pendingTasks || []
+  const cats = [
+    { key: 'RequirementList', icon: '📝', label: '需求相关', color: '#2f54eb', bg: '#f0f5ff' },
+    { key: 'TestReportList', icon: '🧪', label: '测试报告', color: '#52c41a', bg: '#f6ffed' },
+    { key: 'Issue', icon: '⚠️', label: '问题相关', color: '#fa8c16', bg: '#fff7e6' },
+    { key: 'Weekly', icon: '📄', label: '周报相关', color: '#722ed1', bg: '#f9f0ff' },
+  ]
+  return cats.map(cat => ({
+    ...cat,
+    tasks: tasks.filter(t => t.routeName === cat.key),
+    count: tasks.filter(t => t.routeName === cat.key).reduce((s, t) => s + t.count, 0),
+  })).filter(cat => cat.tasks.length > 0)
+})
+
+const totalPending = computed(() => {
+  return (stats.value?.pendingTasks || []).reduce((s, t) => s + t.count, 0)
+})
+
+function parseQuery(raw) {
+  const query = {}
+  if (raw) {
+    raw.split('&').forEach(p => {
+      const [k, v] = p.split('=')
+      if (k && v) query[k] = v
+    })
+  }
+  return query
+}
+
+function goTask(task) {
+  router.push({ name: task.routeName, query: parseQuery(task.routeQuery) })
+}
+
 onMounted(async () => {
   try {
     const res = await getStats()
@@ -81,7 +120,64 @@ onMounted(async () => {
 
 <template>
   <div class="page-container" v-loading="loading">
-    <template v-if="stats">
+    <!-- Tab 切换 -->
+    <div class="dash-tabs">
+      <div
+        class="dash-tab"
+        :class="{ active: activeTab === 'overview' }"
+        @click="activeTab = 'overview'"
+      >📊 数据概览</div>
+      <div
+        class="dash-tab"
+        :class="{ active: activeTab === 'pending' }"
+        @click="activeTab = 'pending'"
+      >
+        📋 待办事项
+        <span v-if="totalPending" class="tab-badge">{{ totalPending }}</span>
+      </div>
+    </div>
+
+    <!-- ==================== 待办事项 Tab ==================== -->
+    <div v-if="activeTab === 'pending'">
+      <!-- 空状态 -->
+      <div v-if="totalPending === 0" class="empty-pending">
+        <div class="empty-icon">🎉</div>
+        <div class="empty-text">太棒了，没有待办事项！</div>
+      </div>
+
+      <!-- 按分类展示 -->
+      <div v-for="cat in taskCategories" :key="cat.key" class="pending-section">
+        <div class="pending-section-title">
+          <span>{{ cat.icon }}</span>
+          <span>{{ cat.label }}</span>
+          <span class="pending-section-count">{{ cat.count }} 项</span>
+        </div>
+        <div class="pending-list">
+          <div
+            v-for="t in cat.tasks"
+            :key="t.title"
+            class="pending-card"
+            @click="goTask(t)"
+          >
+            <div class="pending-icon" :style="{ background: cat.bg, color: cat.color }">
+              <span v-if="cat.key === 'RequirementList'">📋</span>
+              <span v-else-if="cat.key === 'TestReportList'">✅</span>
+              <span v-else-if="cat.key === 'Issue'">🔧</span>
+              <span v-else>📄</span>
+            </div>
+            <div class="pending-info">
+              <div class="pending-title">{{ t.title }}</div>
+              <div class="pending-desc">{{ t.description }}</div>
+            </div>
+            <div class="pending-count">{{ t.count }}</div>
+            <div class="pending-arrow">→</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 数据概览 Tab ==================== -->
+    <template v-if="activeTab === 'overview' && stats">
       <!-- 需求概览 -->
       <div class="req-overview" v-if="reqSegments.length">
         <div class="req-header">
@@ -266,10 +362,76 @@ onMounted(async () => {
         </el-col>
       </el-row>
     </template>
+    <!-- end overview tab -->
   </div>
 </template>
 
 <style scoped>
+/* ======== Tab 切换 ======== */
+.dash-tabs {
+  display: flex; gap: 0; margin-bottom: 20px;
+  background: #fff; border-radius: 8px; padding: 4px;
+  box-shadow: var(--card-shadow);
+}
+.dash-tab {
+  flex: 1; text-align: center; padding: 10px 0; font-size: 14px; font-weight: 500;
+  border-radius: 6px; cursor: pointer; color: #606266; transition: all .2s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.dash-tab.active { background: #006eff; color: #fff; }
+.dash-tab:hover:not(.active) { color: #006eff; background: #ecf5ff; }
+.tab-badge {
+  display: inline-block; min-width: 20px; height: 20px; line-height: 20px;
+  border-radius: 10px; font-size: 12px; background: #f56c6c; color: #fff;
+  text-align: center; padding: 0 6px;
+}
+.dash-tab.active .tab-badge { background: rgba(255,255,255,.3); }
+
+/* ======== 待办事项 ======== */
+.empty-pending { text-align: center; padding: 80px 0; }
+.empty-icon { font-size: 56px; margin-bottom: 16px; }
+.empty-text { font-size: 15px; color: #909399; }
+
+.pending-section { margin-bottom: 24px; }
+.pending-section-title {
+  font-size: 14px; font-weight: 600; color: #303133; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.pending-section-count { font-size: 12px; color: #909399; font-weight: 400; margin-left: 4px; }
+
+.pending-list { display: flex; flex-direction: column; gap: 10px; }
+.pending-card {
+  background: #fff; border-radius: 8px; padding: 16px 20px;
+  box-shadow: var(--card-shadow);
+  display: flex; align-items: center; gap: 14px;
+  transition: all .2s; cursor: pointer; border: 1px solid transparent;
+}
+.pending-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
+  border-color: #006eff;
+}
+.pending-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+.pending-info { flex: 1; min-width: 0; }
+.pending-title { font-size: 14px; font-weight: 600; color: #303133; margin-bottom: 3px; }
+.pending-desc { font-size: 12px; color: #909399; }
+.pending-count {
+  flex-shrink: 0; min-width: 24px; height: 24px; border-radius: 12px;
+  font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+  background: #f56c6c; color: #fff; padding: 0 8px;
+}
+.pending-arrow {
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+  background: #ecf5ff; color: #006eff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; transition: all .2s;
+}
+.pending-card:hover .pending-arrow { background: #006eff; color: #fff; }
+
 /* 需求概览 */
 .req-overview {
   background: #faf5ff; border-radius: 12px; padding: 16px 24px; margin-bottom: 20px;

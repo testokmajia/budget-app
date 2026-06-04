@@ -34,11 +34,11 @@ public class Team {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setName(String name) { this.name = name != null ? name.trim() : null; }
     public String getDepartment() { return department; }
-    public void setDepartment(String department) { this.department = department; }
+    public void setDepartment(String department) { this.department = department != null ? department.trim() : null; }
     public String getLeader() { return leader; }
-    public void setLeader(String leader) { this.leader = leader; }
+    public void setLeader(String leader) { this.leader = leader != null ? leader.trim() : null; }
     public String getMembers() { return members; }
     public void setMembers(String members) { this.members = members; }
     public String getSystems() { return systems; }

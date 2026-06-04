@@ -11,6 +11,10 @@ import java.time.LocalDateTime;
 @Table(name = "test_reports")
 public class TestReport extends BaseEntity {
 
+    /** 报告编号，如 TR-2026-001 */
+    @Column(name = "report_code", unique = true, length = 20)
+    private String reportCode;
+
     /** 测试报告标题 */
     @Column(nullable = false, length = 200)
     private String title;
@@ -42,6 +46,10 @@ public class TestReport extends BaseEntity {
     @Column(name = "test_report_path", length = 500)
     private String testReportPath;
 
+    /** 测试报告原始文件名 */
+    @Column(name = "test_report_name", length = 255)
+    private String testReportName;
+
     /** 状态：草稿/已确认 */
     @Column(nullable = false, length = 20)
     private String status;
@@ -66,20 +74,32 @@ public class TestReport extends BaseEntity {
     @Column(name = "confirmed_at")
     private LocalDateTime confirmedAt;
 
+    /** 部门审核状态 JSON: {"部门名": "pending|approved"} */
+    @Column(name = "dept_review_status", columnDefinition = "TEXT")
+    private String deptReviewStatus;
+
+    /** 部门审核人列表 JSON: ["姓名1","姓名2"] */
+    @Column(name = "dept_reviewers", columnDefinition = "TEXT")
+    private String deptReviewers;
+
     // ==================== getters & setters ====================
 
+    public String getReportCode() { return reportCode; }
+    public void setReportCode(String reportCode) { this.reportCode = reportCode != null ? reportCode.trim() : null; }
     public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+    public void setTitle(String title) { this.title = title != null ? title.trim() : null; }
     public String getRequirementIds() { return requirementIds; }
     public void setRequirementIds(String requirementIds) { this.requirementIds = requirementIds; }
     public String getRequirementCodes() { return requirementCodes; }
     public void setRequirementCodes(String requirementCodes) { this.requirementCodes = requirementCodes; }
     public String getSystemNames() { return systemNames; }
-    public void setSystemNames(String systemNames) { this.systemNames = systemNames; }
+    public void setSystemNames(String systemNames) { this.systemNames = systemNames != null ? systemNames.trim() : null; }
     public String getReviewPersons() { return reviewPersons; }
     public void setReviewPersons(String reviewPersons) { this.reviewPersons = reviewPersons; }
     public String getTestReportPath() { return testReportPath; }
     public void setTestReportPath(String testReportPath) { this.testReportPath = testReportPath; }
+    public String getTestReportName() { return testReportName; }
+    public void setTestReportName(String testReportName) { this.testReportName = testReportName != null ? testReportName.trim() : null; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public LocalDate getPlannedTestDate() { return plannedTestDate; }
@@ -89,7 +109,11 @@ public class TestReport extends BaseEntity {
     public Long getSubmitterId() { return submitterId; }
     public void setSubmitterId(Long submitterId) { this.submitterId = submitterId; }
     public String getSubmitterName() { return submitterName; }
-    public void setSubmitterName(String submitterName) { this.submitterName = submitterName; }
+    public void setSubmitterName(String submitterName) { this.submitterName = submitterName != null ? submitterName.trim() : null; }
     public LocalDateTime getConfirmedAt() { return confirmedAt; }
     public void setConfirmedAt(LocalDateTime confirmedAt) { this.confirmedAt = confirmedAt; }
+    public String getDeptReviewStatus() { return deptReviewStatus; }
+    public void setDeptReviewStatus(String deptReviewStatus) { this.deptReviewStatus = deptReviewStatus; }
+    public String getDeptReviewers() { return deptReviewers; }
+    public void setDeptReviewers(String deptReviewers) { this.deptReviewers = deptReviewers; }
 }

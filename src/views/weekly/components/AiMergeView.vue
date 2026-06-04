@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { mergeTeamSummary, updateTeamSummary, submitTeamSummary, getTeamStats, getSubmittedList } from '@/api/weekly'
+import { nameEquals } from '@/utils/compare'
 
 const loading = ref(false)
 const merging = ref(false)
@@ -49,7 +50,7 @@ const teamNames = computed(() => teams.value.map(t => t.teamName))
 
 const teamReports = computed(() => {
   if (!selectedTeam.value) return []
-  return reports.value.filter(r => (r.teamName || r.userDepartment) === selectedTeam.value)
+  return reports.value.filter(r => nameEquals((r.teamName || r.userDepartment), selectedTeam.value))
 })
 
 function parseContent(c) {

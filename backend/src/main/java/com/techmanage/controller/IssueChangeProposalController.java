@@ -51,10 +51,12 @@ public class IssueChangeProposalController {
         List<Team> ledTeams = teamRepository.findByLeader(u.getName());
         if (ledTeams.isEmpty()) return Collections.emptyList();
         Set<String> memberNames = new HashSet<>();
+        memberNames.add(trim(u.getName())); // 组长自身也视为团队成员
         for (Team t : ledTeams) {
             if (t.getMembers() != null) {
                 for (String name : t.getMembers().split(",")) {
-                    memberNames.add(name.trim());
+                    String trimmed = name.trim();
+                    if (!trimmed.isEmpty()) memberNames.add(trimmed);
                 }
             }
         }
@@ -91,5 +93,9 @@ public class IssueChangeProposalController {
     @GetMapping("/api/issues/{id}/change-proposals")
     public ApiResponse<List<ChangeProposalResponse>> getByIssueId(@PathVariable Long id) {
         return ApiResponse.ok(proposalService.getByIssueId(id));
+    }
+
+    private static String trim(String s) {
+        return s == null ? null : s.trim();
     }
 }

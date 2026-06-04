@@ -89,7 +89,8 @@ public class FileUploadController {
     }
 
     @GetMapping("/files/download")
-    public ResponseEntity<Resource> downloadByPath(@RequestParam String path) {
+    public ResponseEntity<Resource> downloadByPath(@RequestParam String path,
+                                                    @RequestParam(required = false) String name) {
         if (path == null || path.isBlank()) throw new BusinessException("文件路径为空");
         // 安全校验：只允许 /uploads/ 下的文件
         if (!path.startsWith("/uploads/")) throw new BusinessException("非法的文件路径");
@@ -100,7 +101,8 @@ public class FileUploadController {
         try { resource = new UrlResource(target.toUri().toURL()); }
         catch (MalformedURLException e) { throw new BusinessException("文件路径无效", e); }
         if (!resource.exists()) throw new BusinessException("文件不存在");
-        String fileName = target.getFileName().toString();
+        // 优先使用传入的原始文件名，降级到 UUID 文件名
+        String fileName = (name != null && !name.isBlank()) ? name : target.getFileName().toString();
         String contentType = URLConnection.guessContentTypeFromName(fileName);
         if (contentType == null) contentType = "application/octet-stream";
         String encodedName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");

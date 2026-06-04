@@ -22,17 +22,17 @@ public class Role {
     public Role() {}
 
     public Role(String code, String name, String description) {
-        this.code = code;
-        this.name = name;
-        this.description = description;
+        this.code = code != null ? code.trim() : null;
+        this.name = name != null ? name.trim() : null;
+        this.description = description != null ? description.trim() : null;
     }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
+    public void setCode(String code) { this.code = code != null ? code.trim() : null; }
     public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setName(String name) { this.name = name != null ? name.trim() : null; }
     public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
+    public void setDescription(String description) { this.description = description != null ? description.trim() : null; }
 }

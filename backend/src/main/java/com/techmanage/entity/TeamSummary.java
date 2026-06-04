@@ -38,7 +38,7 @@ public class TeamSummary extends BaseEntity {
     private LocalDateTime submittedAt;
 
     public String getTeamName() { return teamName; }
-    public void setTeamName(String teamName) { this.teamName = teamName; }
+    public void setTeamName(String teamName) { this.teamName = teamName != null ? teamName.trim() : null; }
     public Long getLeaderId() { return leaderId; }
     public void setLeaderId(Long leaderId) { this.leaderId = leaderId; }
     public LocalDate getWeekStartDate() { return weekStartDate; }

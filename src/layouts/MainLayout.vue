@@ -1,8 +1,8 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, provide } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { getStats } from '@/api/dashboard'
+import { nameEquals } from '@/utils/compare'
 import { changePassword } from '@/api/auth'
 import { ElMessage } from 'element-plus'
 import {
@@ -22,7 +22,6 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const drawerVisible = ref(false)
-const pendingTasks = ref([])
 
 const pageTitle = computed(() => {
   const map = {
@@ -34,7 +33,7 @@ const pageTitle = computed(() => {
     '/weekly/team': '工作周报',
     '/weekly/history': '工作周报',
     '/weekly/dept': '工作周报',
-    '/requirement/list': '需求提出',
+    '/requirement/list': '需求提报',
     '/requirement/kanban': '需求看板',
     '/requirement/test-report': '测试报告',
     '/pending': '问题实施',
@@ -42,24 +41,6 @@ const pageTitle = computed(() => {
   }
   return map[route.path] || ''
 })
-
-function parseQuery(raw) {
-  const query = {}
-  if (raw) {
-    raw.split('&').forEach(p => {
-      const [k, v] = p.split('=')
-      if (k && v) query[k] = v
-    })
-  }
-  return query
-}
-
-async function fetchPendingTasks() {
-  try {
-    const res = await getStats()
-    pendingTasks.value = res.data?.pendingTasks || []
-  } catch { pendingTasks.value = [] }
-}
 
 // Resizable sidebar
 const STORAGE_KEY = 'sidebar_width'
@@ -103,10 +84,7 @@ function onResizeEnd() {
   try { localStorage.setItem(STORAGE_KEY, String(sidebarWidth.value)) } catch { /* ignore */ }
 }
 
-provide('refreshBadges', fetchPendingTasks)
-
 onMounted(() => {
-  fetchPendingTasks()
 })
 
 onUnmounted(() => {
@@ -128,7 +106,7 @@ const weeklySubItems = [
 ]
 
 const requirementSubItems = [
-  { path: '/requirement/list', title: '需求提出' },
+  { path: '/requirement/list', title: '需求提报' },
   { path: '/requirement/kanban', title: '需求看板' },
   { path: '/requirement/test-report', title: '测试报告' },
 ]
@@ -153,7 +131,7 @@ const visibleWeeklySubItems = computed(() =>
 
 const isWeeklyRoute = computed(() => route.path.startsWith('/weekly'))
 
-const showPending = computed(() => userStore.user?.department === '信息科技部')
+const showPending = computed(() => nameEquals(userStore.user?.department, '信息科技部'))
 
 function navigate(path) {
   drawerVisible.value = false
@@ -370,14 +348,6 @@ function handleLogout() {
           <span class="page-title">{{ pageTitle }}</span>
         </div>
         <div class="header-right">
-          <span
-            v-for="t in pendingTasks"
-            :key="t.title"
-            class="header-badge"
-            @click="router.push({ name: t.routeName, query: parseQuery(t.routeQuery) })"
-          >
-            {{ t.title }} <strong>{{ t.count }}</strong>
-          </span>
           <span class="user-info">
             {{ userStore.user?.name }}
             <span class="roles">({{ userStore.user?.roles?.join('、') }})</span>

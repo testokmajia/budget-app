@@ -30,9 +30,14 @@ export function create(data) {
   return request.post('/requirements', data)
 }
 
-// 审批通过
+// 审批通过（通用）
 export function approve(id, data) {
   return request.post(`/requirements/${id}/approve`, data)
+}
+
+// 部门负责人审批
+export function deptApprove(id, data) {
+  return request.post(`/requirements/${id}/dept-approve`, data)
 }
 
 // 驳回

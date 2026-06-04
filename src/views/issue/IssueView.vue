@@ -6,6 +6,7 @@ import { Plus, Search, Download, ArrowDown, Edit, Share, UserFilled, DocumentAdd
 import { useUserStore } from '@/stores/user'
 import { getList, getById, create, assign, submitSolution, reviewByLeader, reviewByAdmin, confirm, reject, closeIssue, updateIssue, exportIssues, submitChangeProposal, getPendingProposals, reviewProposal, undoIssue, uploadAttachments, getAttachments, deleteAttachment, downloadAttachment, getSystemAssignments, feedbackToSubmitter } from '@/api/issue'
 import { getUsers, getCategories, getDepartments, getTeams, getOccasions, getSystems } from '@/api/admin'
+import { nameEquals, nameInArray, findByName, filterByName } from '@/utils/compare'
 
 const userStore = useUserStore()
 const route = useRoute()
@@ -102,18 +103,18 @@ const assignRules = {
 }
 const selectedTeam = computed(() => {
   if (!assignForm.responsibleTeam) return null
-  return teams.value.find(t => t.name === assignForm.responsibleTeam)
+  return findByName(teams.value, assignForm.responsibleTeam)
 })
 const teamMembers = computed(() => {
   if (!selectedTeam.value || !selectedTeam.value.members) {
     if (selectedTeam.value && selectedTeam.value.leader) {
-      return allUsers.value.filter(u => u.name === selectedTeam.value.leader)
+      return filterByName(allUsers.value, selectedTeam.value.leader)
     }
     return []
   }
   const names = new Set(selectedTeam.value.members.split(',').map(s => s.trim()).filter(Boolean))
-  if (selectedTeam.value.leader) names.add(selectedTeam.value.leader)
-  return allUsers.value.filter(u => names.has(u.name))
+  if (selectedTeam.value.leader) names.add(selectedTeam.value.leader.trim())
+  return allUsers.value.filter(u => names.has((u.name || '').trim()))
 })
 const teamSystems = computed(() => {
   if (!assignForm.responsibleTeam) return []
@@ -127,9 +128,9 @@ const editTeamSystems = computed(() => {
 watch(() => assignForm.systems, (sysNames) => {
   if (!sysNames || sysNames.length === 0) return
   const firstSys = sysNames[0]
-  const sys = systems.value.find(s => s.name === firstSys)
+  const sys = findByName(systems.value, firstSys)
   if (sys && sys.leader) {
-    const owner = allUsers.value.find(u => u.name === sys.leader)
+    const owner = findByName(allUsers.value, sys.leader)
     if (owner) assignForm.responsiblePersonId = owner.id
   }
 })
@@ -380,15 +381,15 @@ const canManage = computed(() => isAdmin.value || isIssueAdmin.value)
 const isItEmployee = computed(() => userStore.user?.department === '信息科技部')
 const isTeamLeader = computed(() => {
   if (!isItEmployee.value) return false
-  return teams.value.some(t => t.leader === userStore.user?.name)
+  return teams.value.some(t => nameEquals(t.leader, userStore.user?.name))
 })
 const ledTeamMembers = computed(() => {
   if (!isTeamLeader.value) return []
   const memberNames = new Set()
-  teams.value.filter(t => t.leader === userStore.user?.name).forEach(t => {
+  teams.value.filter(t => nameEquals(t.leader, userStore.user?.name)).forEach(t => {
     if (t.members) t.members.split(',').map(s => s.trim()).filter(Boolean).forEach(n => memberNames.add(n))
   })
-  return allUsers.value.filter(u => memberNames.has(u.name))
+  return allUsers.value.filter(u => memberNames.has((u.name || '').trim()))
 })
 const hasActiveFilters = computed(() => {
   return filters.submitterIds.length > 0 ||

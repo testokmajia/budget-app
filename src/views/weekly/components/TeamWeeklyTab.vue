@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, inject, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { nameEquals } from '@/utils/compare'
 import {
   getSubmittedList, getTeamStats, remindMember,
   mergeTeamSummary, updateTeamSummary, submitTeamSummary,
@@ -103,12 +104,12 @@ function memberAvatarColor(name) {
 function getTeamSummary(teamName) {
   const { weekStartDate } = getWeekDates()
   // 只精确匹配本周，不使用历史周数据兜底，避免跨周状态污染
-  return summaries.value.find(s => s.teamName === teamName && s.weekStartDate === weekStartDate) || null
+  return summaries.value.find(s => nameEquals(s.teamName, teamName) && s.weekStartDate === weekStartDate) || null
 }
 
 // 判断 AI 生成按钮是否应禁用，返回禁用原因（空字符串表示不禁用）
 function teamAiDisabledReason(teamName) {
-  if (mergingTeam.value === teamName) return 'loading'
+  if (nameEquals(mergingTeam.value, teamName)) return 'loading'
   if (isDeptReportFinalized.value) return '周报已审批，不允许再次修改'
   const summary = getTeamSummary(teamName)
   if (summary?.status === 'SUBMITTED') return '组内汇总已提交，无法再次生成'
@@ -347,7 +348,7 @@ function summaryStatusClass(status) {
             <div
               v-for="m in t.members" :key="m.name"
               class="sidebar-member"
-              :class="{ active: !viewingSummary && selectedMember?.name === m.name && selectedTeamName === t.teamName, overdue: !m.submitted }"
+              :class="{ active: !viewingSummary && nameEquals(selectedMember?.name, m.name) && nameEquals(selectedTeamName, t.teamName), overdue: !m.submitted }"
               @click="selectMember(t.teamName, m)"
             >
               <div class="member-avatar" :style="{ background: memberAvatarColor(m.name) }">{{ m.name.charAt(0) }}</div>
@@ -370,7 +371,7 @@ function summaryStatusClass(status) {
                   :disabled="!!teamAiDisabledReason(t.teamName)"
                   @click="handleMerge(t.teamName)"
                 >
-                  <span v-if="mergingTeam === t.teamName">⏳</span>
+                  <span v-if="nameEquals(mergingTeam, t.teamName)">⏳</span>
                   <span v-else>✨</span> AI 生成小组周报
                 </button>
               </span>

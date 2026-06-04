@@ -68,23 +68,23 @@ public class IssueFeedback extends BaseEntity {
     private String system;
 
     public String getIssueCode() { return issueCode; }
-    public void setIssueCode(String issueCode) { this.issueCode = issueCode; }
+    public void setIssueCode(String issueCode) { this.issueCode = issueCode != null ? issueCode.trim() : null; }
     public Long getSubmitterId() { return submitterId; }
     public void setSubmitterId(Long submitterId) { this.submitterId = submitterId; }
     public String getSubmitterDepartment() { return submitterDepartment; }
-    public void setSubmitterDepartment(String submitterDepartment) { this.submitterDepartment = submitterDepartment; }
+    public void setSubmitterDepartment(String submitterDepartment) { this.submitterDepartment = submitterDepartment != null ? submitterDepartment.trim() : null; }
     public Long getOccasionId() { return occasionId; }
     public void setOccasionId(Long occasionId) { this.occasionId = occasionId; }
     public String getMeetingDepartment() { return meetingDepartment; }
-    public void setMeetingDepartment(String meetingDepartment) { this.meetingDepartment = meetingDepartment; }
+    public void setMeetingDepartment(String meetingDepartment) { this.meetingDepartment = meetingDepartment != null ? meetingDepartment.trim() : null; }
     public LocalDate getMeetingDate() { return meetingDate; }
     public void setMeetingDate(LocalDate meetingDate) { this.meetingDate = meetingDate; }
     public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+    public void setTitle(String title) { this.title = title != null ? title.trim() : null; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
     public String getResponsibleTeam() { return responsibleTeam; }
-    public void setResponsibleTeam(String responsibleTeam) { this.responsibleTeam = responsibleTeam; }
+    public void setResponsibleTeam(String responsibleTeam) { this.responsibleTeam = responsibleTeam != null ? responsibleTeam.trim() : null; }
     public Long getResponsiblePersonId() { return responsiblePersonId; }
     public void setResponsiblePersonId(Long responsiblePersonId) { this.responsiblePersonId = responsiblePersonId; }
     public String getTemporarySolution() { return temporarySolution; }

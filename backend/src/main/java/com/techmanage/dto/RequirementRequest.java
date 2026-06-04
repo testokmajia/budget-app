@@ -45,6 +45,15 @@ public class RequirementRequest {
     /** 需求说明书路径（产品经理上传） */
     private String specDocumentPath;
 
+    /** 需求说明书原始文件名 */
+    private String specDocumentName;
+
+    /** 架构评审报告路径 */
+    private String reviewReportPath;
+
+    /** 架构评审报告原始文件名 */
+    private String reviewReportName;
+
     /** 确认人员JSON（产品经理设置） */
     private String specReviewers;
 
@@ -83,6 +92,12 @@ public class RequirementRequest {
     public void setPrimarySystemName(String primarySystemName) { this.primarySystemName = primarySystemName; }
     public String getSpecDocumentPath() { return specDocumentPath; }
     public void setSpecDocumentPath(String specDocumentPath) { this.specDocumentPath = specDocumentPath; }
+    public String getSpecDocumentName() { return specDocumentName; }
+    public void setSpecDocumentName(String specDocumentName) { this.specDocumentName = specDocumentName; }
+    public String getReviewReportPath() { return reviewReportPath; }
+    public void setReviewReportPath(String reviewReportPath) { this.reviewReportPath = reviewReportPath; }
+    public String getReviewReportName() { return reviewReportName; }
+    public void setReviewReportName(String reviewReportName) { this.reviewReportName = reviewReportName; }
     public String getSpecReviewers() { return specReviewers; }
     public void setSpecReviewers(String specReviewers) { this.specReviewers = specReviewers; }
     public String getPlannedTestDate() { return plannedTestDate; }

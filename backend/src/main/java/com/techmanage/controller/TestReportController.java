@@ -94,9 +94,24 @@ public class TestReportController {
         return ApiResponse.ok(reportService.reject(id, currentUser(auth), comment));
     }
 
+    /** 获取测试报告的审核记录 */
+    @GetMapping("/{id}/comments")
+    public ApiResponse<List<Map<String, Object>>> comments(@PathVariable Long id) {
+        return ApiResponse.ok(reportService.getComments(id));
+    }
+
     /** 根据选中需求自动生成默认确认人员 */
     @PostMapping("/default-reviewers")
     public ApiResponse<List<Map<String, Object>>> defaultReviewers(@RequestBody Map<String, String> body) {
         return ApiResponse.ok(reportService.getDefaultReviewers(body.get("requirementIds")));
+    }
+
+    /** 部门负责人审核测试报告 */
+    @PostMapping("/{id}/dept-review")
+    public ApiResponse<Map<String, Object>> deptReview(@PathVariable Long id,
+                                                        @RequestBody TestReportRequest request,
+                                                        Authentication auth) {
+        return ApiResponse.ok(reportService.deptReview(id, currentUser(auth),
+                request.getComment(), !"reject".equals(request.getComment())));
     }
 }

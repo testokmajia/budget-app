@@ -53,10 +53,12 @@ public class IssueFeedbackController {
         List<Team> ledTeams = teamRepository.findByLeader(u.getName());
         if (ledTeams.isEmpty()) return Collections.emptyList();
         Set<String> memberNames = new HashSet<>();
+        memberNames.add(trim(u.getName())); // 组长自身也视为团队成员
         for (Team t : ledTeams) {
             if (t.getMembers() != null) {
                 for (String name : t.getMembers().split(",")) {
-                    memberNames.add(name.trim());
+                    String trimmed = name.trim();
+                    if (!trimmed.isEmpty()) memberNames.add(trimmed);
                 }
             }
         }
@@ -84,7 +86,7 @@ public class IssueFeedbackController {
             @RequestParam(required = false) LocalDate dateTo,
             @RequestParam(defaultValue = "true") boolean myScope) {
         User u = currentUser(auth);
-        boolean isItEmployee = "信息科技部".equals(u.getDepartment());
+        boolean isItEmployee = "信息科技部".equals(trim(u.getDepartment()));
         List<Long> teamMemberIds = isItEmployee ? getTeamMemberIds(u) : Collections.emptyList();
         return ApiResponse.ok(issueService.list(page, size, sortBy, sortDir, keyword,
                 statuses, submitterIds, submitterDepartments, occasionId, issueType,
@@ -196,7 +198,7 @@ public class IssueFeedbackController {
                                           @RequestParam(required = false) LocalDate dateFrom,
                                           @RequestParam(required = false) LocalDate dateTo) {
         User u = currentUser(auth);
-        boolean isItEmployee = "信息科技部".equals(u.getDepartment());
+        boolean isItEmployee = "信息科技部".equals(trim(u.getDepartment()));
         List<Long> teamMemberIds = isItEmployee ? getTeamMemberIds(u) : Collections.emptyList();
         var result = issueService.list(0, Integer.MAX_VALUE, "createdAt", "desc", null,
                 statuses, submitterIds, submitterDepartments, occasionId, issueType,
@@ -230,5 +232,10 @@ public class IssueFeedbackController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=issues.xlsx")
                 .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .body(excel);
+    }
+
+    /** 安全的 trim，null 安全 */
+    private static String trim(String s) {
+        return s == null ? null : s.trim();
     }
 }

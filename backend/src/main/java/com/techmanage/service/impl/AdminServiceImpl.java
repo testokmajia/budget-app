@@ -195,7 +195,7 @@ public class AdminServiceImpl implements AdminService {
         category.setSortOrder(request.sortOrder());
         category.setEnabled(request.enabled());
         IssueCategory saved = categoryRepository.save(category);
-        if (!request.name().equals(oldName)) {
+        if (!trim(request.name()).equals(trim(oldName))) {
             issueFeedbackRepository.updateIssueType(oldName, request.name());
         }
         return saved;
@@ -244,7 +244,7 @@ public class AdminServiceImpl implements AdminService {
         department.setLeader(request.leader());
         department.setEnabled(request.enabled());
         Department saved = departmentRepository.save(department);
-        if (!request.name().equals(oldName)) {
+        if (!trim(request.name()).equals(trim(oldName))) {
             issueFeedbackRepository.updateSubmitterDepartment(oldName, request.name());
             userRepository.updateDepartment(oldName, request.name());
         }
@@ -484,5 +484,10 @@ public class AdminServiceImpl implements AdminService {
             user.getEmail(),
             user.isEnabled(), roles, user.getCreatedAt()
         );
+    }
+
+    /** 安全的 trim，null 安全 */
+    private static String trim(String s) {
+        return s == null ? null : s.trim();
     }
 }

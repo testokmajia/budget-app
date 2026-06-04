@@ -45,13 +45,13 @@ public class RewardPunishment extends BaseEntity {
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
     public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+    public void setTitle(String title) { this.title = title != null ? title.trim() : null; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
     public String getInvolvedPerson() { return involvedPerson; }
-    public void setInvolvedPerson(String involvedPerson) { this.involvedPerson = involvedPerson; }
+    public void setInvolvedPerson(String involvedPerson) { this.involvedPerson = involvedPerson != null ? involvedPerson.trim() : null; }
     public String getDepartment() { return department; }
-    public void setDepartment(String department) { this.department = department; }
+    public void setDepartment(String department) { this.department = department != null ? department.trim() : null; }
     public LocalDate getDecisionDate() { return decisionDate; }
     public void setDecisionDate(LocalDate decisionDate) { this.decisionDate = decisionDate; }
     public String getDocumentNo() { return documentNo; }

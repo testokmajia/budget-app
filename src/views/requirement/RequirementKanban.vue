@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 import { getList, getStats } from '@/api/requirement'
+import { nameEquals } from '@/utils/compare'
 import RequirementForm from './components/RequirementForm.vue'
 import RequirementDetail from './components/RequirementDetail.vue'
 
@@ -111,12 +112,12 @@ async function toggleDetail(key, type) {
     let cards = res.data?.content || []
     // 客户端按系统/团队筛选
     if (type === 'system' && key !== '未指定系统') {
-      cards = cards.filter(c => c.systemItems?.some(s => s.name === key))
+      cards = cards.filter(c => c.systemItems?.some(s => nameEquals(s.name, key)))
     }
     if (type === 'team') {
       cards = cards.filter(c => {
         if (key === '未指定团队') return !c.systemItems?.some(s => s.team)
-        return c.systemItems?.some(s => s.team === key)
+        return c.systemItems?.some(s => nameEquals(s.team, key))
       })
     }
     detailCards.value = cards
@@ -141,6 +142,8 @@ function onFormSuccess() {
 
 function onDetailClose() {
   detailVisible.value = false
+  loadStats()
+  loadSummaryData()
   if (expanded.value) toggleDetail(activeFilter.value, viewMode.value)
 }
 

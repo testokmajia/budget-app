@@ -85,7 +85,7 @@ const routes = [
         path: 'requirement/list',
         name: 'RequirementList',
         component: () => import('@/views/requirement/RequirementList.vue'),
-        meta: { title: '需求提出' },
+        meta: { title: '需求提报' },
       },
       {
         path: 'requirement/kanban',

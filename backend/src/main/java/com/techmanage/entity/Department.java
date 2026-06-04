@@ -22,9 +22,9 @@ public class Department {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setName(String name) { this.name = name != null ? name.trim() : null; }
     public String getLeader() { return leader; }
-    public void setLeader(String leader) { this.leader = leader; }
+    public void setLeader(String leader) { this.leader = leader != null ? leader.trim() : null; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 }

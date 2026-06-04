@@ -28,13 +28,13 @@ public class SystemInfo {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
+    public void setCode(String code) { this.code = code != null ? code.trim() : null; }
     public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setName(String name) { this.name = name != null ? name.trim() : null; }
     public String getLeader() { return leader; }
-    public void setLeader(String leader) { this.leader = leader; }
+    public void setLeader(String leader) { this.leader = leader != null ? leader.trim() : null; }
     public String getTeam() { return team; }
-    public void setTeam(String team) { this.team = team; }
+    public void setTeam(String team) { this.team = team != null ? team.trim() : null; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 }

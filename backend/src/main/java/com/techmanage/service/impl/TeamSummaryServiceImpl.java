@@ -91,7 +91,7 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
         final String teamName;
         if (request.teamName() != null && !request.teamName().isBlank()) {
             teamName = teams.stream()
-                .filter(t -> t.getName().equals(request.teamName()))
+                .filter(t -> trim(t.getName()).equals(trim(request.teamName())))
                 .findFirst()
                 .orElse(teams.get(0))
                 .getName();
@@ -370,5 +370,10 @@ public class TeamSummaryServiceImpl implements TeamSummaryService {
             s.getStatus(), s.getSourceReportIds(),
             s.getSubmittedAt(), s.getCreatedAt(), s.getUpdatedAt()
         );
+    }
+
+    /** 安全的 trim，null 安全 */
+    private static String trim(String s) {
+        return s == null ? null : s.trim();
     }
 }

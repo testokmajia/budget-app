@@ -18,6 +18,7 @@ const form = reactive({
   priority: '普通',
   expectedDate: '',
   specDocumentPath: '',
+  specDocumentName: '',
   submitterId: null,
   dept: '',
 })
@@ -44,6 +45,7 @@ async function handleUpload(options) {
   try {
     const res = await uploadRequestFile(options.file)
     form.specDocumentPath = res.data.filePath
+    form.specDocumentName = res.data.fileName
     ElMessage.success('上传成功')
   } catch (e) { ElMessage.error(e.response?.data?.error || '上传失败') }
 }
@@ -59,6 +61,7 @@ async function handleSubmit() {
       priority: form.priority,
       expectedDate: form.expectedDate || undefined,
       specDocumentPath: form.specDocumentPath || undefined,
+      specDocumentName: form.specDocumentName || undefined,
       submitterId: form.submitterId || undefined,
     })
     ElMessage.success('需求已提交')
@@ -77,6 +80,7 @@ function resetForm() {
   form.priority = '普通'
   form.expectedDate = ''
   form.specDocumentPath = ''
+  form.specDocumentName = ''
   form.submitterId = null
   form.dept = ''
   formRef.value?.resetFields()
@@ -163,7 +167,7 @@ watch(() => props.visible, (val) => {
               <div style="font-size: 12px; color: #909399; margin-top: 6px">支持 PDF/Word/图片，单文件≤20MB</div>
             </template>
           </el-upload>
-          <span v-if="form.specDocumentPath" style="font-size:12px;color:#006eff">{{ form.specDocumentPath }}</span>
+          <span v-if="form.specDocumentPath" style="font-size:12px;color:#006eff">{{ form.specDocumentName || form.specDocumentPath }}</span>
         </div>
       </el-form-item>
     </el-form>

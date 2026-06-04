@@ -29,14 +29,14 @@ public class IssueSystemAssignment extends BaseEntity {
 
     public IssueSystemAssignment(Long issueId, String systemName, Long systemOwnerId) {
         this.issueId = issueId;
-        this.systemName = systemName;
+        this.systemName = systemName != null ? systemName.trim() : null;
         this.systemOwnerId = systemOwnerId;
     }
 
     public Long getIssueId() { return issueId; }
     public void setIssueId(Long issueId) { this.issueId = issueId; }
     public String getSystemName() { return systemName; }
-    public void setSystemName(String systemName) { this.systemName = systemName; }
+    public void setSystemName(String systemName) { this.systemName = systemName != null ? systemName.trim() : null; }
     public Long getSystemOwnerId() { return systemOwnerId; }
     public void setSystemOwnerId(Long systemOwnerId) { this.systemOwnerId = systemOwnerId; }
     public boolean isCompleted() { return completed; }

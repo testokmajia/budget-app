@@ -81,6 +81,18 @@ public class Requirement extends BaseEntity {
     @Column(name = "spec_document_path", length = 500)
     private String specDocumentPath;
 
+    /** 需求说明书原始文件名 */
+    @Column(name = "spec_document_name", length = 255)
+    private String specDocumentName;
+
+    /** 架构评审报告文件路径（架构管理岗上传） */
+    @Column(name = "review_report_path", length = 500)
+    private String reviewReportPath;
+
+    /** 架构评审报告原始文件名 */
+    @Column(name = "review_report_name", length = 255)
+    private String reviewReportName;
+
     /**
      * 确认人员列表，JSON格式：
      * [{"name":"姓名","role":"系统负责人|产品经理|业务人员","system":"系统名"}]
@@ -114,17 +126,17 @@ public class Requirement extends BaseEntity {
     // ==================== getters & setters ====================
 
     public String getRequirementCode() { return requirementCode; }
-    public void setRequirementCode(String requirementCode) { this.requirementCode = requirementCode; }
+    public void setRequirementCode(String requirementCode) { this.requirementCode = requirementCode != null ? requirementCode.trim() : null; }
     public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+    public void setTitle(String title) { this.title = title != null ? title.trim() : null; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
     public Long getSubmitterId() { return submitterId; }
     public void setSubmitterId(Long submitterId) { this.submitterId = submitterId; }
     public String getSubmitterName() { return submitterName; }
-    public void setSubmitterName(String submitterName) { this.submitterName = submitterName; }
+    public void setSubmitterName(String submitterName) { this.submitterName = submitterName != null ? submitterName.trim() : null; }
     public String getDept() { return dept; }
-    public void setDept(String dept) { this.dept = dept; }
+    public void setDept(String dept) { this.dept = dept != null ? dept.trim() : null; }
     public String getPriority() { return priority; }
     public void setPriority(String priority) { this.priority = priority; }
     public String getStatus() { return status; }
@@ -148,9 +160,15 @@ public class Requirement extends BaseEntity {
     public String getAttachmentPath() { return attachmentPath; }
     public void setAttachmentPath(String attachmentPath) { this.attachmentPath = attachmentPath; }
     public String getPrimarySystemName() { return primarySystemName; }
-    public void setPrimarySystemName(String primarySystemName) { this.primarySystemName = primarySystemName; }
+    public void setPrimarySystemName(String primarySystemName) { this.primarySystemName = primarySystemName != null ? primarySystemName.trim() : null; }
     public String getSpecDocumentPath() { return specDocumentPath; }
     public void setSpecDocumentPath(String specDocumentPath) { this.specDocumentPath = specDocumentPath; }
+    public String getSpecDocumentName() { return specDocumentName; }
+    public void setSpecDocumentName(String specDocumentName) { this.specDocumentName = specDocumentName != null ? specDocumentName.trim() : null; }
+    public String getReviewReportPath() { return reviewReportPath; }
+    public void setReviewReportPath(String reviewReportPath) { this.reviewReportPath = reviewReportPath; }
+    public String getReviewReportName() { return reviewReportName; }
+    public void setReviewReportName(String reviewReportName) { this.reviewReportName = reviewReportName != null ? reviewReportName.trim() : null; }
     public String getSpecReviewers() { return specReviewers; }
     public void setSpecReviewers(String specReviewers) { this.specReviewers = specReviewers; }
     public LocalDate getPlannedTestDate() { return plannedTestDate; }

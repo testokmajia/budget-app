@@ -44,7 +44,7 @@ public class Checklist extends BaseEntity {
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getResponsiblePerson() { return responsiblePerson; }
-    public void setResponsiblePerson(String responsiblePerson) { this.responsiblePerson = responsiblePerson; }
+    public void setResponsiblePerson(String responsiblePerson) { this.responsiblePerson = responsiblePerson != null ? responsiblePerson.trim() : null; }
     public LocalDate getPlannedDate() { return plannedDate; }
     public void setPlannedDate(LocalDate plannedDate) { this.plannedDate = plannedDate; }
     public LocalDate getActualDate() { return actualDate; }

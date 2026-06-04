@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { nameEquals } from '@/utils/compare'
 import { getSubmittedList, getTeamStats, remindMember, approveReport, rejectReport } from '@/api/weekly'
 import { parseItems } from '@/utils/workItemParser'
 import WorkItemCard from './WorkItemCard.vue'
@@ -147,7 +148,7 @@ function memberAvatarColor(name) {
               <el-tag
                 v-for="t in teams" :key="t.teamName"
                 size="small"
-                :type="t.teamName === selectedTeamName ? '' : 'info'"
+                :type="nameEquals(t.teamName, selectedTeamName) ? '' : 'info'"
               >
                 {{ t.teamName }}
               </el-tag>
@@ -195,7 +196,7 @@ function memberAvatarColor(name) {
               :key="m.name"
               class="sidebar-member"
               :class="{
-                active: selectedMember?.name === m.name && selectedTeamName === t.teamName,
+                active: nameEquals(selectedMember?.name, m.name) && nameEquals(selectedTeamName, t.teamName),
                 overdue: !m.submitted
               }"
               @click="selectMember(t.teamName, m)"
